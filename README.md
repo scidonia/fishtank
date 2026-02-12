@@ -51,10 +51,10 @@ In **separate terminals**, start agents:
 
 ```bash
 # Agent 1
-uv run agent --agent-id a1
+uv run agent --agent-id scout
 
 # Agent 2
-uv run agent --agent-id a2
+uv run agent --agent-id nomad
 ```
 
 Watch them move around in the viewer!
@@ -139,10 +139,10 @@ In separate terminals:
 
 ```bash
 # Agent 1
-uv run agent --agent-id a1
+uv run agent --agent-id scout
 
 # Agent 2
-uv run agent --agent-id a2
+uv run agent --agent-id nomad
 
 # You can add more agents (they'll spawn in random valid locations)
 uv run agent --agent-id a3
@@ -214,7 +214,7 @@ Content-Type: application/json
 Request body:
 ```json
 {
-  "agent_id": "a1",
+  "agent_id": "scout",
   "turn_id": 1842,
   "type": "move",
   "args": { "dir": "NW" }
@@ -334,7 +334,7 @@ tail -f /tmp/fishtank-server.log
 
 ### Agent Not Receiving Observations
 
-- **Verify agent_id matches spawned agents** (a1, a2 are pre-spawned)
+- **Verify agent_id matches spawned agents** (scout, nomad, warden are pre-spawned)
 - **Check server logs** for connection messages
 - **Check network requests** in agent terminal output
 - **Verify server is running** on port 3000

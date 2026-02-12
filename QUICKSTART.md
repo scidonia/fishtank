@@ -61,8 +61,9 @@ Then:
 2. Click "Connect" button
 3. In new terminals, run agents:
    ```bash
-   uv run agent --agent-id a1
-   uv run agent --agent-id a2
+   uv run agent --agent-id scout
+   uv run agent --agent-id nomad
+   uv run agent --agent-id warden
    ```
 
 ### Manual Start
@@ -74,17 +75,22 @@ npm install  # first time only
 npm start
 ```
 
-**Terminal 2 - Agent 1:**
+**Terminal 2 - Scout Agent:**
 ```bash
-uv run agent --agent-id a1
+uv run agent --agent-id scout
 ```
 
-**Terminal 3 - Agent 2:**
+**Terminal 3 - Nomad Agent:**
 ```bash
-uv run agent --agent-id a2
+uv run agent --agent-id nomad
 ```
 
-**Terminal 4 - Viewer:**
+**Terminal 4 - Warden Agent:**
+```bash
+uv run agent --agent-id warden
+```
+
+**Terminal 5 - Viewer:**
 ```bash
 cd viewer
 python -m http.server 8080
@@ -139,7 +145,7 @@ Events:
 
 **Agent Stream** - Private observations for agents
 ```
-GET http://localhost:3000/stream/agent?agent_id=a1
+GET http://localhost:3000/stream/agent?agent_id=scout
 
 Events:
 - obs: Observation for this turn (includes visible tiles, entities, stats)
@@ -153,7 +159,7 @@ POST http://localhost:3000/act
 Content-Type: application/json
 
 {
-  "agent_id": "a1",
+  "agent_id": "scout",
   "turn_id": 42,
   "type": "move",
   "args": { "dir": "NE" }
@@ -207,7 +213,7 @@ fishtank/
 uv run agent --agent-id a3
 ```
 
-Agent IDs must be unique. The world server currently spawns `a1` and `a2` at startup.
+Agent IDs must be unique. The world server currently spawns `scout`, `nomad`, and `warden` at startup.
 
 ### Customizing the World
 
@@ -221,8 +227,9 @@ const world = new WorldServer({ seed: 42, width: 25, height: 18 });
 this.turnInterval = 1000; // ms per turn
 
 // Initial agents
-this.spawnAgent('a1', 5, 5);
-this.spawnAgent('a2', 15, 10);
+this.spawnAgent('scout', 5, 5);
+this.spawnAgent('nomad', 8, 7);
+this.spawnAgent('warden', 6, 9);
 ```
 
 ### Next Steps

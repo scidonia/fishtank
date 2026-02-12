@@ -164,7 +164,7 @@ class AgentRunner:
 
 @app.command()
 def main(
-    agent_id: str = typer.Option("a1", help="Agent ID to use"),
+    agent_id: str = typer.Option("scout", help="Agent ID to use"),
     server_url: str = typer.Option("http://localhost:3000", help="World server URL"),
 ) -> None:
     """

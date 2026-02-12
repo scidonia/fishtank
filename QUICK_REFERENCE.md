@@ -9,7 +9,7 @@
 Then:
 1. Open http://localhost:8080
 2. Click "Connect"
-3. Run agents: `uv run agent --agent-id a1`
+3. Run agents: `uv run agent --agent-id scout`
 
 ## Stop Everything
 
@@ -36,8 +36,9 @@ tail -f /tmp/fishtank-viewer.log
 
 **Run multiple agents:**
 ```bash
-uv run agent --agent-id a1 &
-uv run agent --agent-id a2 &
+uv run agent --agent-id scout &
+uv run agent --agent-id nomad &
+uv run agent --agent-id warden &
 uv run agent --agent-id a3 &
 ```
 

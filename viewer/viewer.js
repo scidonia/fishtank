@@ -106,6 +106,7 @@ class WorldViewer {
         document.getElementById('follow-agent').addEventListener('click', () => {
             if (this.followAgent) {
                 this.followAgent = null;
+                this.clearFocus(); // Clear agent focus too
                 document.getElementById('follow-agent').textContent = 'Follow Agent';
             } else {
                 // Follow first agent
@@ -131,6 +132,7 @@ class WorldViewer {
     handleMouseDown(e) {
         this.isDragging = true;
         this.followAgent = null; // Stop following when dragging
+        this.clearFocus(); // Clear agent focus when dragging (free camera)
         document.getElementById('follow-agent').textContent = 'Follow Agent';
         this.dragStart = {
             x: e.clientX + this.camera.x,
@@ -170,9 +172,17 @@ class WorldViewer {
         if (!agent) return;
         
         const [x, y] = agent.pos;
-        this.camera.x = x * this.tileSize - this.canvas.width / 2 + this.tileSize / 2;
-        this.camera.y = y * this.tileSize - this.canvas.height / 2 + this.tileSize / 2;
+        const newCamX = x * this.tileSize - this.canvas.width / 2 + this.tileSize / 2;
+        const newCamY = y * this.tileSize - this.canvas.height / 2 + this.tileSize / 2;
+        
+        this.camera.x = newCamX;
+        this.camera.y = newCamY;
         this.constrainCamera();
+        
+        // Log only occasionally to avoid spam
+        if (Math.random() < 0.01) {
+            console.log('Camera centered on agent at tile', x, y, '-> camera px', this.camera.x, this.camera.y);
+        }
     }
     
     connect() {
@@ -263,8 +273,13 @@ class WorldViewer {
     handleDelta(data) {
         if (!this.worldState) return;
         
+        console.log('Delta received - turn:', data.turn_id, 'entities:', data.entities?.length);
+        
         if (data.turn_id) this.worldState.turn_id = data.turn_id;
-        if (data.entities) this.worldState.entities = data.entities;
+        if (data.entities) {
+            console.log('Updating entities:', data.entities.map(e => `${e.id} at [${e.pos}]`).join(', '));
+            this.worldState.entities = data.entities;
+        }
         if (data.map) this.worldState.map = data.map;
         
         this.updateStats();
@@ -276,13 +291,23 @@ class WorldViewer {
     }
     
     startRenderLoop() {
+        this.frameCount = 0;
         const loop = () => {
+            this.frameCount++;
+            
+            // Log occasionally to confirm loop is running
+            if (this.frameCount % 300 === 0) {
+                console.log(`Render loop running - frame ${this.frameCount}`);
+            }
+            
             if (this.worldState) {
                 // Follow agent if enabled
                 if (this.followAgent) {
                     const agent = this.worldState.entities?.find(e => e.id === this.followAgent);
                     if (agent) {
                         this.centerOnAgent(agent);
+                    } else {
+                        console.warn('Following agent', this.followAgent, 'but not found in entities');
                     }
                 }
                 
@@ -291,6 +316,7 @@ class WorldViewer {
             requestAnimationFrame(loop);
         };
         loop();
+        console.log('Render loop started');
     }
     
     render() {
@@ -301,11 +327,23 @@ class WorldViewer {
         
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
+        // Draw a bright test pattern to confirm rendering works
+        this.ctx.fillStyle = '#ff00ff';
+        this.ctx.fillRect(5, 5, 10, 10);
+        
         // Calculate visible tile range
         const startTileX = Math.floor(this.camera.x / this.tileSize);
         const startTileY = Math.floor(this.camera.y / this.tileSize);
         const endTileX = Math.ceil((this.camera.x + this.canvas.width) / this.tileSize);
         const endTileY = Math.ceil((this.camera.y + this.canvas.height) / this.tileSize);
+        
+        // Log occasionally to show camera position and entities
+        if (Math.random() < 0.01) {
+            console.log(`Camera viewing tiles [${startTileX}-${endTileX}, ${startTileY}-${endTileY}]`);
+            if (this.worldState.entities) {
+                console.log('Entity positions:', this.worldState.entities.map(e => `${e.id}:[${e.pos}]`).join(', '));
+            }
+        }
         
         // Render visible map tiles
         for (let ty = startTileY; ty <= endTileY; ty++) {
@@ -322,11 +360,17 @@ class WorldViewer {
         
         // Render visible entities
         if (this.worldState.entities) {
+            let renderedCount = 0;
             for (const entity of this.worldState.entities) {
                 const [ex, ey] = entity.pos;
                 if (ex >= startTileX && ex <= endTileX && ey >= startTileY && ey <= endTileY) {
                     this.renderEntity(entity);
+                    renderedCount++;
                 }
+            }
+            // Log occasionally to avoid spam
+            if (Math.random() < 0.01) {
+                console.log(`Rendered ${renderedCount} entities out of ${this.worldState.entities.length} total`);
             }
         }
         
@@ -335,9 +379,28 @@ class WorldViewer {
             this.renderFOV();
         }
         
-        // Update camera info
-        document.getElementById('camera-info').textContent = 
-            `${Math.floor(this.camera.x / this.tileSize)}, ${Math.floor(this.camera.y / this.tileSize)}`;
+        // Update camera info (if element exists)
+        const cameraInfo = document.getElementById('camera-info');
+        if (cameraInfo) {
+            cameraInfo.textContent = `${Math.floor(this.camera.x / this.tileSize)}, ${Math.floor(this.camera.y / this.tileSize)}`;
+        }
+        
+        // Draw debug info in corner
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(5, 5, 200, 80);
+        
+        this.ctx.fillStyle = '#00ff00';
+        this.ctx.font = '14px monospace';
+        this.ctx.fillText(`Frame: ${this.frameCount || 0}`, 10, 25);
+        this.ctx.fillText(`Turn: ${this.worldState.turn_id || 0}`, 10, 45);
+        if (this.worldState.entities) {
+            this.ctx.fillText(`Entities: ${this.worldState.entities.length}`, 10, 65);
+            // Show first entity position
+            const e = this.worldState.entities[0];
+            if (e) {
+                this.ctx.fillText(`${e.id}: [${e.pos[0]},${e.pos[1]}]`, 10, 85);
+            }
+        }
     }
     
     renderTile(x, y, tile) {
@@ -372,27 +435,116 @@ class WorldViewer {
         const px = x * this.tileSize - this.camera.x;
         const py = y * this.tileSize - this.camera.y;
         
-        if (this.tilesLoaded && this.tiles.entities[entity.type]) {
+        // Log occasionally
+        if (Math.random() < 0.01) {
+            console.log(`Rendering ${entity.id} at tile [${x},${y}] -> pixel [${px},${py}]`);
+        }
+        
+        // Paper doll rendering for agents with appearance data
+        if (entity.type === 'agent' && entity.appearance) {
+            this.renderAgent(entity, px, py);
+        } else if (this.tilesLoaded && this.tiles.entities[entity.type]) {
             this.ctx.drawImage(this.tiles.entities[entity.type], px, py, this.tileSize, this.tileSize);
         } else {
             const colors = {
                 'agent': '#4fc3f7',
                 'rabbit': '#ffeb3b',
                 'deer': '#ff9800',
+                'plant': '#4caf50', // Green for plants
+                'meat': '#d32f2f', // Red for meat/corpses
+                'bones': '#9e9e9e', // Gray for bones
             };
             
             const cx = px + this.tileSize / 2;
             const cy = py + this.tileSize / 2;
             
-            this.ctx.fillStyle = colors[entity.type] || '#fff';
-            this.ctx.beginPath();
-            this.ctx.arc(cx, cy, this.tileSize / 3, 0, Math.PI * 2);
-            this.ctx.fill();
+            // Different rendering for different entity types
+            if (entity.type === 'plant') {
+                // Draw plant as a small green circle (shrub/bush)
+                this.ctx.fillStyle = colors['plant'];
+                this.ctx.beginPath();
+                this.ctx.arc(cx, cy, this.tileSize / 4, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Add a darker outline
+                this.ctx.strokeStyle = '#2e7d32';
+                this.ctx.lineWidth = 1;
+                this.ctx.stroke();
+            } else if (entity.type === 'meat') {
+                // Draw meat as a red blob
+                this.ctx.fillStyle = colors['meat'];
+                this.ctx.fillRect(px + 4, py + 4, this.tileSize - 8, this.tileSize - 8);
+                
+                // Darker outline
+                this.ctx.strokeStyle = '#b71c1c';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(px + 4, py + 4, this.tileSize - 8, this.tileSize - 8);
+            } else if (entity.type === 'bones') {
+                // Draw bones as gray X pattern
+                this.ctx.strokeStyle = colors['bones'];
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(px + 4, py + 4);
+                this.ctx.lineTo(px + this.tileSize - 4, py + this.tileSize - 4);
+                this.ctx.moveTo(px + this.tileSize - 4, py + 4);
+                this.ctx.lineTo(px + 4, py + this.tileSize - 4);
+                this.ctx.stroke();
+            } else {
+                // Regular entity rendering
+                this.ctx.fillStyle = colors[entity.type] || '#fff';
+                this.ctx.beginPath();
+                this.ctx.arc(cx, cy, this.tileSize / 3, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Draw a debug square around entity
+                this.ctx.strokeStyle = '#ff0000';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(px, py, this.tileSize, this.tileSize);
+            }
         }
         
         if (entity.hp !== undefined) {
             this.renderHealthBar(px + this.tileSize / 2, py + 2, entity.hp, 100);
         }
+    }
+    
+    renderAgent(entity, px, py) {
+        const app = entity.appearance;
+        const cx = px + this.tileSize / 2;
+        const cy = py + this.tileSize / 2;
+        const size = this.tileSize;
+        
+        // Draw body layers (paper doll style)
+        // 1. Head (skin tone circle)
+        this.ctx.fillStyle = app.skinTone;
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy - size * 0.2, size * 0.2, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // 2. Hair (top of head)
+        this.ctx.fillStyle = app.hairColor;
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy - size * 0.25, size * 0.18, Math.PI, Math.PI * 2);
+        this.ctx.fill();
+        
+        // 3. Torso (shirt)
+        this.ctx.fillStyle = app.shirtColor;
+        this.ctx.fillRect(cx - size * 0.25, cy, size * 0.5, size * 0.3);
+        
+        // 4. Legs (pants)
+        this.ctx.fillStyle = app.pantsColor;
+        this.ctx.fillRect(cx - size * 0.15, cy + size * 0.3, size * 0.12, size * 0.25);
+        this.ctx.fillRect(cx + size * 0.03, cy + size * 0.3, size * 0.12, size * 0.25);
+        
+        // 5. Arms (skin tone)
+        this.ctx.fillStyle = app.skinTone;
+        this.ctx.fillRect(cx - size * 0.35, cy + size * 0.05, size * 0.1, size * 0.25);
+        this.ctx.fillRect(cx + size * 0.25, cy + size * 0.05, size * 0.1, size * 0.25);
+        
+        // Outline for clarity
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(px, py, size, size);
     }
     
     renderHealthBar(x, y, hp, maxHp) {
@@ -418,31 +570,34 @@ class WorldViewer {
         const [agentX, agentY] = agent.pos;
         const fovRadius = 10; // 10 tile radius
         
-        // Draw semi-transparent overlay on everything
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Clear the FOV circle (make it visible)
         const centerPx = agentX * this.tileSize - this.camera.x + this.tileSize / 2;
         const centerPy = agentY * this.tileSize - this.camera.y + this.tileSize / 2;
         const radiusPx = fovRadius * this.tileSize;
         
-        // Use destination-out to "cut out" the FOV circle
-        this.ctx.globalCompositeOperation = 'destination-out';
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-        this.ctx.beginPath();
-        this.ctx.arc(centerPx, centerPy, radiusPx, 0, Math.PI * 2);
-        this.ctx.fill();
+        // Save context
+        this.ctx.save();
         
-        // Reset composite operation
-        this.ctx.globalCompositeOperation = 'source-over';
+        // Create a clipping path for everything OUTSIDE the FOV circle
+        this.ctx.beginPath();
+        this.ctx.rect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.arc(centerPx, centerPy, radiusPx, 0, Math.PI * 2, true); // anticlockwise = hole
+        this.ctx.clip();
+        
+        // Draw gray overlay only outside the FOV (inside the clipping region)
+        this.ctx.fillStyle = 'rgba(70, 70, 70, 0.65)';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Restore context (removes clipping)
+        this.ctx.restore();
         
         // Draw FOV circle outline
         this.ctx.strokeStyle = '#4fc3f7';
         this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([5, 5]);
         this.ctx.beginPath();
         this.ctx.arc(centerPx, centerPy, radiusPx, 0, Math.PI * 2);
         this.ctx.stroke();
+        this.ctx.setLineDash([]);
         
         // Draw agent highlight
         this.ctx.strokeStyle = '#ff9800';
@@ -481,7 +636,7 @@ class WorldViewer {
         tooltip.innerHTML = `
             <strong>${entity.type}</strong> (${entity.id})<br>
             HP: ${entity.hp}<br>
-            ${entity.hunger !== undefined ? `Hunger: ${entity.hunger}` : ''}
+            ${entity.energy !== undefined ? `Energy: ${entity.energy}` : (entity.hunger !== undefined ? `Energy: ${entity.hunger}` : '')}
         `;
     }
     
@@ -490,13 +645,8 @@ class WorldViewer {
     }
     
     updateStats() {
+        // World stats panel removed to save space for agent info and logs
         if (!this.worldState) return;
-        
-        document.getElementById('turn-id').textContent = this.worldState.turn_id || 0;
-        document.getElementById('agent-count').textContent = 
-            this.worldState.entities?.filter(e => e.type === 'agent').length || 0;
-        document.getElementById('map-size').textContent = 
-            `${this.worldState.map[0].length}×${this.worldState.map.length}`;
     }
     
     updateSurveillance() {
@@ -512,7 +662,7 @@ class WorldViewer {
                 <div class="agent-item ${isFocused ? 'active' : ''}" data-agent-id="${agent.id}">
                     <strong>${agent.id}</strong> ${isFocused ? '👁️' : ''}<br>
                     Position: ${agent.pos[0]}, ${agent.pos[1]}<br>
-                    HP: ${agent.hp} | Hunger: ${agent.hunger}
+                    HP: ${agent.hp} | Energy: ${agent.energy !== undefined ? agent.energy : agent.hunger}
                 </div>
             `;
         }).join('');
@@ -523,13 +673,20 @@ class WorldViewer {
                 const agentId = item.dataset.agentId;
                 const agent = agents.find(a => a.id === agentId);
                 if (agent) {
-                    // Set focused agent for surveillance
-                    this.setFocusedAgent(agentId);
-                    
-                    // Also follow camera
-                    this.followAgent = agentId;
-                    this.centerOnAgent(agent);
-                    document.getElementById('follow-agent').textContent = 'Free Camera';
+                    // Toggle focus if clicking already focused agent
+                    if (this.focusedAgentId === agentId) {
+                        console.log('Toggling off focus for', agentId);
+                        this.clearFocus();
+                    } else {
+                        console.log('Focusing on agent', agentId, 'at position', agent.pos);
+                        // Set focused agent for surveillance
+                        this.setFocusedAgent(agentId);
+                        
+                        // Also follow camera
+                        this.followAgent = agentId;
+                        this.centerOnAgent(agent);
+                        document.getElementById('follow-agent').textContent = 'Free Camera';
+                    }
                     this.updateSurveillance();
                 }
             });
@@ -557,6 +714,10 @@ class WorldViewer {
         
         this.surveillanceEventSource.addEventListener('snapshot', (e) => {
             const data = JSON.parse(e.data);
+            
+            // Display agent info (prompt and notes)
+            this.displayAgentInfo(agentId, data.prompt, data.notes);
+            
             // Display recent telemetry
             for (const event of data.events || []) {
                 this.displayAgentLog(event);
@@ -575,6 +736,61 @@ class WorldViewer {
         console.log(`Surveillance stream opened for ${agentId}`);
     }
     
+    clearFocus() {
+        // Close surveillance stream
+        if (this.surveillanceEventSource) {
+            this.surveillanceEventSource.close();
+            this.surveillanceEventSource = null;
+        }
+        
+        // Clear focused agent
+        this.focusedAgentId = null;
+        
+        // Stop following agent
+        this.followAgent = null;
+        document.getElementById('follow-agent').textContent = 'Follow Agent';
+        
+        // Hide agent info panel
+        document.getElementById('agent-info-panel').style.display = 'none';
+        
+        // Clear agent log
+        const logList = document.getElementById('agent-log-list');
+        logList.innerHTML = '';
+        
+        console.log('Focus cleared');
+    }
+    
+    displayAgentInfo(agentId, prompt, notes) {
+        // Show the agent info panel
+        const panel = document.getElementById('agent-info-panel');
+        panel.style.display = 'block';
+        
+        // Update agent ID
+        document.getElementById('info-agent-id').textContent = agentId;
+        
+        // Update prompt
+        const promptDisplay = document.getElementById('agent-prompt-display');
+        if (prompt && prompt.trim()) {
+            promptDisplay.textContent = prompt;
+            promptDisplay.style.color = '#ccc';
+        } else {
+            promptDisplay.textContent = '(No prompt set)';
+            promptDisplay.style.color = '#666';
+            promptDisplay.style.fontStyle = 'italic';
+        }
+        
+        // Update notes
+        const notesDisplay = document.getElementById('agent-notes-display');
+        if (notes && notes.trim()) {
+            notesDisplay.textContent = notes;
+            notesDisplay.style.color = '#ccc';
+        } else {
+            notesDisplay.textContent = '(No notes)';
+            notesDisplay.style.color = '#666';
+            notesDisplay.style.fontStyle = 'italic';
+        }
+    }
+    
     displayAgentLog(event) {
         const logList = document.getElementById('agent-log-list');
         const logEntry = document.createElement('div');
@@ -587,7 +803,7 @@ class WorldViewer {
         if (phase === 'obs') {
             content = `
                 <div class="log-phase">📡 Turn ${event.turn_id}</div>
-                <div class="log-stats">HP: ${event.health} | Hunger: ${event.hunger} | Visible: ${event.visible_entity_count}</div>
+                <div class="log-stats">HP: ${event.health} | Energy: ${event.energy !== undefined ? event.energy : event.hunger} | Visible: ${event.visible_entity_count}</div>
             `;
         } else if (phase === 'decision') {
             content = `

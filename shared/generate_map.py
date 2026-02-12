@@ -1,74 +1,136 @@
 #!/usr/bin/env python3
-"""Generate a 1000x1000 ASCII map for Fish Tank."""
+"""Generate a 1000x1000 ASCII map for Fish Tank with open areas."""
+
 import random
 
-def generate_map(width: int = 1000, height: int = 1000, seed: int = 42) -> list[str]:
-    """Generate a procedural dungeon map."""
-    random.seed(seed)
-    
-    # Initialize with walls
-    map_data = [['#' for _ in range(width)] for _ in range(height)]
-    
-    # Create rooms
-    num_rooms = 50
-    rooms = []
-    
-    for _ in range(num_rooms):
-        # Random room size
-        room_w = random.randint(10, 40)
-        room_h = random.randint(10, 40)
-        room_x = random.randint(1, width - room_w - 1)
-        room_y = random.randint(1, height - room_h - 1)
-        
-        # Carve out room
-        for y in range(room_y, room_y + room_h):
-            for x in range(room_x, room_x + room_w):
-                map_data[y][x] = '.'
-        
-        rooms.append((room_x, room_y, room_w, room_h))
-    
-    # Connect rooms with corridors
-    for i in range(len(rooms) - 1):
-        x1, y1, w1, h1 = rooms[i]
-        x2, y2, w2, h2 = rooms[i + 1]
-        
-        # Center points
-        cx1, cy1 = x1 + w1 // 2, y1 + h1 // 2
-        cx2, cy2 = x2 + w2 // 2, y2 + h2 // 2
-        
-        # Horizontal corridor
-        for x in range(min(cx1, cx2), max(cx1, cx2) + 1):
-            map_data[cy1][x] = '.'
-        
-        # Vertical corridor
-        for y in range(min(cy1, cy2), max(cy1, cy2) + 1):
-            map_data[y][cx2] = '.'
-    
-    # Add some interesting features
-    # Scatter some pillars in rooms
-    for _ in range(100):
-        x = random.randint(1, width - 2)
-        y = random.randint(1, height - 2)
-        if map_data[y][x] == '.' and random.random() < 0.3:
-            map_data[y][x] = '#'
-    
-    # Convert to strings
-    return [''.join(row) for row in map_data]
 
-if __name__ == '__main__':
-    print("Generating 1000x1000 map...")
+def generate_map(width: int = 1000, height: int = 1000, seed: int = 42) -> list[str]:
+    """Generate a more open map with scattered obstacles instead of corridors."""
+    random.seed(seed)
+
+    # Initialize with floors (inverted from before!)
+    map_data = [["." for _ in range(width)] for _ in range(height)]
+
+    # Add border walls
+    for x in range(width):
+        map_data[0][x] = "#"
+        map_data[height - 1][x] = "#"
+    for y in range(height):
+        map_data[y][0] = "#"
+        map_data[y][width - 1] = "#"
+
+    # Add scattered wall clusters (like rocks, pillars, etc.)
+    num_clusters = 200  # More clusters but smaller
+
+    for _ in range(num_clusters):
+        cx = random.randint(10, width - 10)
+        cy = random.randint(10, height - 10)
+        cluster_size = random.randint(3, 12)  # Varied sizes
+
+        # Create irregular wall cluster
+        for dy in range(-cluster_size, cluster_size + 1):
+            for dx in range(-cluster_size, cluster_size + 1):
+                x = cx + dx
+                y = cy + dy
+
+                if 1 <= x < width - 1 and 1 <= y < height - 1:
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    # Only place walls in roughly circular cluster, with randomness
+                    if dist < cluster_size and random.random() < 0.4:
+                        map_data[y][x] = "#"
+
+    # Add some larger open "clearings" by removing walls
+    num_clearings = 30
+    for _ in range(num_clearings):
+        cx = random.randint(50, width - 50)
+        cy = random.randint(50, height - 50)
+        clearing_radius = random.randint(15, 35)
+
+        for dy in range(-clearing_radius, clearing_radius + 1):
+            for dx in range(-clearing_radius, clearing_radius + 1):
+                x = cx + dx
+                y = cy + dy
+
+                if 1 <= x < width - 1 and 1 <= y < height - 1:
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    if dist < clearing_radius:
+                        map_data[y][x] = "."
+
+    # Add house structures scattered across the map
+    def add_house(cx: int, cy: int, house_width: int, house_height: int):
+        """Add a rectangular house with walls and interior floor space."""
+        # Clear the entire area first
+        for y in range(cy - 1, cy + house_height + 2):
+            for x in range(cx - 1, cx + house_width + 2):
+                if 1 <= x < width - 1 and 1 <= y < height - 1:
+                    map_data[y][x] = "."
+
+        # Add outer walls
+        for x in range(cx, cx + house_width):
+            if 1 <= x < width - 1:
+                map_data[cy][x] = "#"  # Top wall
+                map_data[cy + house_height - 1][x] = "#"  # Bottom wall
+
+        for y in range(cy, cy + house_height):
+            if 1 <= y < height - 1:
+                map_data[y][cx] = "#"  # Left wall
+                map_data[y][cx + house_width - 1] = "#"  # Right wall
+
+        # Add doorway (random side)
+        door_side = random.randint(0, 3)
+        if door_side == 0:  # Top
+            door_x = cx + house_width // 2
+            if 1 <= door_x < width - 1:
+                map_data[cy][door_x] = "."
+        elif door_side == 1:  # Right
+            door_y = cy + house_height // 2
+            if 1 <= door_y < height - 1:
+                map_data[door_y][cx + house_width - 1] = "."
+        elif door_side == 2:  # Bottom
+            door_x = cx + house_width // 2
+            if 1 <= door_x < width - 1:
+                map_data[cy + house_height - 1][door_x] = "."
+        else:  # Left
+            door_y = cy + house_height // 2
+            if 1 <= door_y < height - 1:
+                map_data[door_y][cx] = "."
+
+    # Generate houses of various sizes
+    num_houses = 50
+    house_sizes = [
+        (6, 6),  # Small hut
+        (8, 8),  # Medium house
+        (10, 10),  # Large house
+        (12, 8),  # Wide house
+        (8, 12),  # Tall house
+        (15, 12),  # Manor
+    ]
+
+    for _ in range(num_houses):
+        house_width, house_height = random.choice(house_sizes)
+        # Make sure houses don't spawn too close to edges
+        cx = random.randint(50, width - house_width - 50)
+        cy = random.randint(50, height - house_height - 50)
+        add_house(cx, cy, house_width, house_height)
+
+    # Convert to strings
+    return ["".join(row) for row in map_data]
+
+
+if __name__ == "__main__":
+    print("Generating 1000x1000 open map...")
     map_lines = generate_map()
-    
-    with open('map.txt', 'w') as f:
+
+    with open("map.txt", "w") as f:
         for line in map_lines:
-            f.write(line + '\n')
-    
+            f.write(line + "\n")
+
     print(f"✓ Generated {len(map_lines)} lines, {len(map_lines[0])} columns")
-    
+
     # Count features
-    floors = sum(line.count('.') for line in map_lines)
-    walls = sum(line.count('#') for line in map_lines)
+    floors = sum(line.count(".") for line in map_lines)
+    walls = sum(line.count("#") for line in map_lines)
     total = len(map_lines) * len(map_lines[0])
-    
-    print(f"  Floors: {floors:,} ({100*floors/total:.1f}%)")
-    print(f"  Walls:  {walls:,} ({100*walls/total:.1f}%)")
+
+    print(f"  Floors: {floors:,} ({100 * floors / total:.1f}%)")
+    print(f"  Walls:  {walls:,} ({100 * walls / total:.1f}%)")

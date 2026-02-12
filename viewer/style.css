@@ -66,7 +66,7 @@ button:hover {
 
 main {
     display: grid;
-    grid-template-columns: 1fr 300px;
+    grid-template-columns: 1fr 450px;
     gap: 20px;
 }
 
@@ -125,7 +125,7 @@ main {
     overflow-y: auto;
 }
 
-.stats-panel, .surveillance-panel, .agent-log-panel, .event-log {
+.stats-panel, .surveillance-panel, .agent-info-panel, .agent-log-panel, .event-log {
     background: #2a2a2a;
     border-radius: 8px;
     padding: 20px;
@@ -133,6 +133,45 @@ main {
 
 .surveillance-panel {
     flex: 0 0 auto;
+}
+
+.agent-info-panel {
+    flex: 0 0 auto;
+}
+
+.agent-info-panel h2 {
+    margin-bottom: 15px;
+}
+
+.agent-info-section {
+    margin-bottom: 15px;
+}
+
+.agent-info-section h3 {
+    font-size: 12px;
+    color: #4a9eff;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.info-content {
+    background: #1a1a1a;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #ccc;
+    max-height: 150px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.info-content:empty::before {
+    content: '(empty)';
+    color: #666;
+    font-style: italic;
 }
 
 .agent-log-panel {
@@ -284,4 +323,105 @@ h2 {
 .log-entry .log-stats {
     color: #999;
     font-size: 10px;
+}
+
+/* Prompt Modal */
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    overflow: auto;
+}
+
+.modal-content {
+    background-color: #1e1e1e;
+    margin: 2% auto;
+    padding: 0;
+    border: 1px solid #444;
+    width: 90%;
+    max-width: 1200px;
+    border-radius: 8px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-header {
+    padding: 20px;
+    background-color: #2a2a2a;
+    border-bottom: 1px solid #444;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    color: #81d4fa;
+}
+
+.modal-close {
+    color: #aaa;
+    font-size: 28px;
+    font-weight: bold;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+}
+
+.modal-close:hover {
+    color: #fff;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.prompt-section {
+    margin-bottom: 30px;
+}
+
+.prompt-section h3 {
+    color: #ffb74d;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 5px;
+}
+
+.prompt-section pre {
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 15px;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+#view-prompt-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+    background: #1e88e5;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#view-prompt-btn:hover {
+    background: #1976d2;
 }

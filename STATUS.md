@@ -9,7 +9,7 @@
 
 ```bash
 ./start-demo.sh                    # Start everything
-uv run agent --agent-id a1         # Run agent in new terminal
+uv run agent --agent-id scout      # Run agent in new terminal
 # Open http://localhost:8080 → click "Connect"
 # Use mouse to drag, +/- to zoom, click agents to follow
 ```
@@ -188,7 +188,7 @@ fishtank/
 ### Action Format
 ```json
 {
-  "agent_id": "a1",
+  "agent_id": "scout",
   "turn_id": 42,
   "type": "move",
   "args": { "dir": "NE" }
@@ -199,7 +199,7 @@ fishtank/
 ```json
 {
   "turn_id": 42,
-  "agent_id": "a1",
+  "agent_id": "scout",
   "health": 73,
   "hunger": 42,
   "visible_tiles": ["########", "#..r....", "#..A...."],
@@ -270,7 +270,7 @@ curl http://localhost:3000/health  # Check if server is up
 ```
 
 ### Agent not receiving observations
-- Verify agent_id matches spawned agent (a1, a2 are pre-spawned)
+- Verify agent_id matches spawned agent (scout, nomad, warden are pre-spawned)
 - Check server logs
 - Check network tab in agent terminal
 

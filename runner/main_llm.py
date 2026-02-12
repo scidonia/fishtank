@@ -32,10 +32,12 @@ class LLMAgentRunner:
         config: AgentConfig,
         server_url: str = "http://localhost:3000",
         use_mock_llm: bool = False,
+        debug_prompts: bool = False,
     ):
         self.config = config
         self.server_url = server_url
         self.use_mock_llm = use_mock_llm
+        self.debug_prompts = debug_prompts
 
         self.memory = AgentMemory()
         self.base_prompt = get_base_prompt(config)
@@ -44,6 +46,9 @@ class LLMAgentRunner:
         self.current_observation: Optional[Dict[str, Any]] = None
         self.turn_count: int = 0
         self.running: bool = False
+
+        # Track last submitted action for memory recording
+        self.last_submitted_action: Optional[Dict[str, Any]] = None
 
     async def run(self) -> None:
         """Main agent loop."""
@@ -118,7 +123,9 @@ class LLMAgentRunner:
 
         turn_id = obs["turn_id"]
         health = obs["health"]
-        hunger = obs["hunger"]
+        energy = obs.get(
+            "energy", obs.get("hunger", 100)
+        )  # Support both old and new format
 
         # Update memory
         self.update_memory(obs)
@@ -133,13 +140,30 @@ class LLMAgentRunner:
                 "phase": "obs",
                 "turn_id": turn_id,
                 "health": health,
-                "hunger": hunger,
+                "energy": energy,
                 "visible_entity_count": len(obs.get("visible_entities", [])),
             },
         )
 
         # Generate observation prompt
         obs_prompt = get_observation_prompt(obs, self.memory)
+
+        # Debug: Always show ASCII map on first turn to verify it's working
+        if turn_id <= 2 and "VISIBLE AREA" in obs_prompt:
+            # Extract just the ASCII map section
+            start_idx = obs_prompt.find("VISIBLE AREA")
+            end_idx = obs_prompt.find("\n\n", start_idx)
+            if start_idx != -1 and end_idx != -1:
+                map_section = obs_prompt[start_idx:end_idx]
+                console.print(f"\n[dim cyan]{map_section}[/dim cyan]\n")
+
+        # Debug: Print full prompt if requested
+        if self.debug_prompts:
+            console.print("\n[bold cyan]═══ BASE PROMPT ═══[/bold cyan]")
+            console.print(self.base_prompt)
+            console.print("\n[bold cyan]═══ OBSERVATION PROMPT ═══[/bold cyan]")
+            console.print(obs_prompt)
+            console.print("[bold cyan]═══ END PROMPTS ═══[/bold cyan]\n")
 
         # Make decision using LLM
         try:
@@ -191,6 +215,56 @@ class LLMAgentRunner:
                     },
                 )
 
+        # Record last action result in history
+        last_action_result = obs.get("last_action_result")
+
+        if last_action_result and self.last_submitted_action:
+            # Combine the submitted action details with the result
+            action_type = self.last_submitted_action["action"]
+            action_args = self.last_submitted_action["args"]
+            success = last_action_result.get("success", False)
+            message = last_action_result.get("message", "")
+            reason = last_action_result.get("reason", "")
+
+            # Format result string
+            if success:
+                result_str = f"✓ {message}"
+            else:
+                result_str = f"✗ {message} ({reason})"
+
+            self.memory.add_action(
+                action=action_type,
+                args=action_args,
+                result=result_str,
+                turn=self.last_submitted_action["turn"],
+            )
+
+        if last_action_result and self.last_submitted_action:
+            # Combine the submitted action details with the result
+            action_type = self.last_submitted_action["action"]
+            action_args = self.last_submitted_action["args"]
+            success = last_action_result.get("success", False)
+            message = last_action_result.get("message", "")
+            reason = last_action_result.get("reason", "")
+
+            # Format result string
+            if success:
+                result_str = f"✓ {message}"
+            else:
+                result_str = f"✗ {message} ({reason})"
+
+            print(
+                f"DEBUG: Adding action to memory: {action_type} at turn {self.last_submitted_action['turn']}",
+                file=sys.stderr,
+            )
+
+            self.memory.add_action(
+                action=action_type,
+                args=action_args,
+                result=result_str,
+                turn=self.last_submitted_action["turn"],
+            )
+
     async def submit_action(
         self, client: httpx.AsyncClient, turn_id: int, decision: Dict[str, Any]
     ) -> None:
@@ -201,6 +275,13 @@ class LLMAgentRunner:
             "agent_id": self.config.agent_id,
             "turn_id": turn_id,
             "type": decision["action"],
+            "args": decision.get("args", {}),
+        }
+
+        # Store this action so we can match it with the result in next observation
+        self.last_submitted_action = {
+            "turn": turn_id,
+            "action": decision["action"],
             "args": decision.get("args", {}),
         }
 
@@ -256,17 +337,19 @@ class LLMAgentRunner:
         """Display the current observation."""
         turn_id = obs["turn_id"]
         health = obs["health"]
-        hunger = obs["hunger"]
+        energy = obs.get(
+            "energy", obs.get("hunger", 100)
+        )  # Support both old and new format
         entities = obs["visible_entities"]
 
-        # Health/hunger indicators
+        # Health/energy indicators
         health_bar = "█" * (health // 10) + "░" * (10 - health // 10)
-        hunger_bar = "█" * (hunger // 10) + "░" * (10 - hunger // 10)
+        energy_bar = "█" * (energy // 10) + "░" * (10 - energy // 10)
 
         status = (
             f"[bold cyan]Turn {turn_id}[/bold cyan]\n"
             f"HP: [{health_bar}] {health}/100\n"
-            f"Hunger: [{hunger_bar}] {hunger}/100"
+            f"Energy: [{energy_bar}] {energy}/100"
         )
 
         console.print(Panel(status, style="blue"))
@@ -278,7 +361,7 @@ class LLMAgentRunner:
 
 @app.command()
 def main(
-    agent_id: str = "a1",
+    agent_id: str = "scout",
     personality: str = "explorer",
     server_url: str = "http://localhost:3000",
     use_mock: bool = False,

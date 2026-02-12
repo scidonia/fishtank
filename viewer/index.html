@@ -29,26 +29,51 @@
             </div>
             
             <aside class="sidebar">
-                <section class="stats-panel">
-                    <h2>World Stats</h2>
-                    <div id="world-stats">
-                        <p>Turn: <span id="turn-id">0</span></p>
-                        <p>Agents: <span id="agent-count">0</span></p>
-                        <p>Map: <span id="map-size">0×0</span></p>
-                        <p>Camera: <span id="camera-info">0, 0</span></p>
-                    </div>
-                </section>
-                
                 <section class="surveillance-panel">
                     <h2>Surveillance</h2>
                     <div id="agent-list"></div>
                 </section>
                 
+                <section class="agent-info-panel" id="agent-info-panel" style="display: none;">
+                    <h2>Agent Info: <span id="info-agent-id"></span></h2>
+                    <div class="agent-info-section">
+                        <h3>Persistent Prompt</h3>
+                        <div id="agent-prompt-display" class="info-content">(No prompt set)</div>
+                    </div>
+                    <div class="agent-info-section">
+                        <h3>Private Notes</h3>
+                        <div id="agent-notes-display" class="info-content">(No notes)</div>
+                    </div>
+                </section>
+                
                 <section class="agent-log-panel">
-                    <h2>Agent Log</h2>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2>Agent Log</h2>
+                        <button id="view-prompt-btn" style="display: none;">View Prompt</button>
+                    </div>
                     <div class="agent-log-info">Click an agent to view their thinking</div>
                     <div id="agent-log-list"></div>
                 </section>
+                
+                <!-- Prompt Modal -->
+                <div id="prompt-modal" class="modal" style="display: none;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>Agent Prompts: <span id="prompt-agent-id"></span></h2>
+                            <button class="modal-close" onclick="document.getElementById('prompt-modal').style.display='none'">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="prompt-section">
+                                <h3>Base Prompt (Personality & Rules)</h3>
+                                <pre id="base-prompt-content"></pre>
+                            </div>
+                            <div class="prompt-section">
+                                <h3>Latest Observation Prompt</h3>
+                                <pre id="obs-prompt-content"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 
                 <section class="event-log">
                     <h2>Event Log</h2>

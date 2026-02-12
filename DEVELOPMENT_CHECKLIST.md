@@ -4,39 +4,49 @@ This checklist tracks progress on implementing the Fish Tank Agentic World accor
 
 ---
 
-## 🎯 CURRENT STATUS - MVP WORKING!
+## 🎯 CURRENT STATUS - LLM AGENTS WORKING!
 
-**Last Updated:** 2026-02-12
+**Last Updated:** 2026-02-12 (Evening)
 
 ### ✅ What Works Now
 - **World Server**: Turn-based simulation with SSE streaming on port 3000
-- **Agent Runner**: Python agents with random walk AI
-- **Browser Viewer**: DCSS tile rendering on port 8080
+- **Agent Runner**: Python agents with **DeepSeek v3 LLM** and 5 personalities
+- **Browser Viewer**: DCSS tile rendering on port 8081 with viewport
 - **Full Integration**: All components communicate properly
-- **Game Mechanics**: Movement, collision, hunger, starvation death
+- **Game Mechanics**: Movement, collision, energy system, food (plants/meat/bones), plant growth
+- **Surveillance**: Real-time agent telemetry with reasoning logs
+- **FOV**: 10-tile radius field of view visualization
 
 ### 🚀 Quick Start
 ```bash
-./start-demo.sh              # Start server + viewer
-uv run agent --agent-id a1   # Run agent in new terminal
-```
-Open http://localhost:8080 and click "Connect"
+# Set your DeepSeek API key
+export DEEPSEEK_API_KEY="your-key"
 
-### 📈 Progress: Stages 0-6 Complete (60%)
+# Start server + viewer
+./start-demo.sh
+
+# Run LLM agents in new terminals
+uv run agent-llm --agent-id scout --personality explorer
+uv run agent-llm --agent-id nomad --personality cooperative
+uv run agent-llm --agent-id warden --personality cautious
+```
+Open http://localhost:8081 and click "Connect", then click an agent to see their thinking
+
+### 📈 Progress: Stages 0-7 Mostly Complete (85%)
 - ✅ **Stage 0-2**: Architecture, contracts, world server MVP
-- ✅ **Stage 3**: Basic visibility (full map, LOS pending)
-- ✅ **Stage 4**: Core validation (combat pending)
-- ✅ **Stage 5**: Agent runner MVP (LLM pending)
-- ✅ **Stage 6**: Viewer with DCSS tiles
-- ⏳ **Stage 7**: Hunger done, combat/food pending
+- ✅ **Stage 3**: FOV-based observations (10-tile radius)
+- ✅ **Stage 4**: Core validation working
+- ✅ **Stage 5**: Agent runner with **LLM (DeepSeek v3)** ✨
+- ✅ **Stage 6**: Viewer with DCSS tiles + viewport + surveillance
+- ✅ **Stage 7**: Energy, food (plants/meat/bones), plant growth ✨
 - ⏳ **Stage 8**: Determinism tests pending
 - ⏳ **Stage 9**: Security pending
 
 ### 🔧 Next Priority
 1. Combat system (`attack` action)
-2. Food/items (`forage`, `eat` actions)
-3. Line-of-sight visibility
-4. LLM integration (DeepSeek v3)
+2. Agent communication (`talk` action)
+3. Agent memory/notes (`edit_prompt` action)
+4. Determinism tests & replay logging
 
 ---
 
@@ -84,14 +94,16 @@ Open http://localhost:8080 and click "Connect"
 - [x] Implement `wait` action
 - [x] Default to `wait` on timeout
 
-## Stage 3: Visibility & Observation Bounding
+## Stage 3: Visibility & Observation Bounding ✅
 
 **Visibility System**
-- [x] Line-of-sight / visibility calculation (MVP: full visibility)
-- [x] `obs.visible_tiles` bounded output
-- [x] `obs.visible_entities` bounded output
-- [ ] Prevent global state leakage (future: proper LOS)
-- [ ] Test: different rooms → different observations (future)
+- [x] Field-of-view calculation (10-tile radius)
+- [x] `obs.visible_tiles` bounded to FOV
+- [x] `obs.visible_entities` bounded to FOV
+- [x] FOV visualization in viewer (clear inside, gray outside)
+- [x] Agents only see terrain and entities within FOV
+- [x] Last action result feedback in observations
+- [ ] Line-of-sight through walls (future: raycasting) - Currently circular FOV
 
 ## Stage 4: Action Space Expansion
 
@@ -115,20 +127,26 @@ Open http://localhost:8080 and click "Connect"
 - [x] Parse observation events
 - [x] Turn synchronization logic
 
-**Memory System**
-- [ ] Base prompt (immutable) (future)
-- [ ] Personal Notes (mutable via `edit_prompt`) (future)
-- [x] Recent event buffer
+**Memory System** ✅
+- [x] Base prompt (immutable) - personality-based
+- [x] Memory tracking (locations visited, entities seen, events)
+- [ ] Personal Notes (mutable via `edit_prompt`) - TODO
 
-**Decision Loop**
+**Decision Loop** ✅
 - [x] Heuristic/random policy (stub)
-- [ ] LLM adapter interface design (future)
-- [ ] DeepSeek v3 integration (future)
+- [x] LLM adapter interface design ✨
+- [x] DeepSeek v3 integration ✨
+- [x] Mock LLM for testing
+- [x] 5 personalities: explorer, survivor, aggressive, cooperative, cautious
 - [x] Ensure exactly one action per turn
 - [x] Timeout handling + retries
+- [x] Telemetry emission (obs/decision/result phases)
 
 **Integration Test**
 - [x] Runner plays N turns unattended without desync
+- [x] LLM agents make intelligent decisions
+- [x] Agents forage when hungry
+- [x] Agents navigate around walls
 
 ## Stage 6: Browser Viewer MVP ✅
 
@@ -137,32 +155,43 @@ Open http://localhost:8080 and click "Connect"
 - [x] Handle `snapshot` event on connect
 - [x] Handle `delta` events per turn
 - [x] Mid-session join test
+- [x] Surveillance stream for agent telemetry ✨
 
 **Rendering**
 - [x] DCSS-style tile grid (actual DCSS tiles)
-- [x] Render entities on map
-- [x] Agent stats panel
+- [x] Viewport-based rendering (1000×1000 map support)
+- [x] Camera controls (drag, arrow keys, zoom +/-)
+- [x] Render entities on map (agents, plants, meat, bones)
+- [x] Agent stats panel with HP/energy bars
 - [x] Event log display
 - [x] Hover tooltips for entities
+- [x] Surveillance panel with agent list ✨
+- [x] Agent log panel showing reasoning/decisions ✨
+- [x] FOV visualization (10-tile radius) ✨
+- [x] Click agents to focus and see their telemetry ✨
 
-## Stage 7: Game Mechanics - Hunger, Food, Combat
+## Stage 7: Game Mechanics - Energy, Food, Combat ✅ (Mostly Complete)
 
-**Hunger System**
-- [x] Hunger decrements each turn
-- [x] Starvation damages HP when hunger = 0
-- [x] Display hunger in observations
+**Energy System** ✅
+- [x] Energy starts at 100, counts down each turn
+- [x] Death at energy = 0
+- [x] Display energy in observations
+- [x] Changed terminology from "hunger" to "energy"
 
-**Food & Items**
-- [ ] Forage yields low nutrition items
-- [ ] Hunting yields higher nutrition (corpses)
-- [ ] Items have position and decay timer
-- [ ] Corpses decay after N turns
-- [ ] `eat` action consumes items
+**Food & Items** ✅
+- [x] Plants spawn at startup (50 initial, grows to 500 max)
+- [x] Plant growth system (30% chance per turn)
+- [x] Forage action (+20 energy from plants, +50 from meat)
+- [x] Corpses drop meat at death location
+- [x] Meat decays to bones after 20 turns (0 nutrition)
+- [x] Bones decay to dust after 50 turns
+- [x] Items rendered in viewer (green circle = plant, red square = meat, gray X = bones)
+- [x] Forage must be within 1 tile radius
 
-**Combat System**
-- [ ] Combat resolution step in turn loop
+**Combat System** ⏳
+- [ ] `attack` action implementation
 - [ ] Damage calculation
-- [ ] Death handling + corpse drops
+- [ ] Death handling (already done: death → meat corpse)
 - [ ] Public combat log events
 - [ ] Recent combat events in observations
 
@@ -205,6 +234,63 @@ Open http://localhost:8080 and click "Connect"
 ---
 
 ## Progress Notes
+
+### [2026-02-12 Late Evening] - Plant Growth System + LLM Integration Complete
+
+**Completed:**
+- ✅ Plant growth system fully implemented
+  - Dynamic plant spawning (30% chance per turn)
+  - Max capacity 500 plants, starts with 50
+  - Plants grow at random valid floor tiles
+  - Logged with plant count tracking
+- ✅ Food ecosystem fully functional
+  - Plants: +20 energy, green circles in viewer
+  - Meat (corpses): +50 energy, red squares, decay after 20 turns
+  - Bones: 0 energy, gray X, decay after 50 turns
+  - Forage action works within 1-tile radius
+- ✅ LLM agents working with DeepSeek v3
+  - 5 personalities: explorer, survivor, aggressive, cooperative, cautious
+  - Agents make intelligent decisions based on observations
+  - Memory system tracks locations, entities, events
+  - Telemetry streaming with obs/decision/result phases
+- ✅ Surveillance system
+  - Real-time agent telemetry in viewer
+  - Agent log panel shows reasoning and token counts
+  - Click agents to focus and see their thinking
+  - FOV visualization (clear inside, gray outside)
+- ✅ Wall collision feedback
+  - Agents receive detailed feedback on failed moves
+  - Last action result shown in observations
+  - Prompts tell agents to try different directions
+
+**System Status:**
+- Three agents (scout explorer, nomad cooperative, warden cautious) running successfully
+- Energy system working (countdown from 100 to 0)
+- Plant growth confirmed (3 plants grew in ~20 turns)
+- Agents foraging when energy gets low
+- Death → meat → bones → dust progression verified
+- Viewer on port 8081 (port 8080 was taken by Docker/Airflow)
+
+**What's Working:**
+```bash
+# Start everything
+export DEEPSEEK_API_KEY="your-key"
+./start-demo.sh
+
+# Run LLM agents
+uv run agent-llm --agent-id scout --personality explorer
+uv run agent-llm --agent-id nomad --personality cooperative
+uv run agent-llm --agent-id warden --personality cautious
+
+# View at http://localhost:8081
+# Click agent in sidebar to see their thinking
+```
+
+**Next Priority:**
+1. Combat system (`attack` action + damage calculation)
+2. Agent communication (`talk` action)
+3. Agent notes (`edit_prompt` action)
+4. Determinism tests
 
 ### [2026-02-12 Evening] - Large Map + Viewport System
 
@@ -263,8 +349,9 @@ Open http://localhost:8080 and click "Connect"
 # 2. Open browser to http://localhost:8080 and click "Connect"
 
 # 3. In new terminals, start agents:
-uv run agent --agent-id a1
-uv run agent --agent-id a2
+uv run agent --agent-id scout
+uv run agent --agent-id nomad
+uv run agent --agent-id warden
 
 # You should see:
 # - Agents moving around randomly in the viewer
@@ -285,7 +372,7 @@ uv run agent --agent-id a2
 **Technical Details:**
 - Server runs on port 3000 (GET /stream/public, /stream/agent, POST /act)
 - Viewer runs on port 8080 (static file server)
-- Agents connect via agent_id (a1, a2 pre-spawned)
+- Agents connect via agent_id (scout, nomad, warden pre-spawned)
 - Turn loop: 1000ms per turn, 800ms action timeout
 - Map: 25x18 tiles, seeded RNG (seed=42)
 

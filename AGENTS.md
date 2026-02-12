@@ -9,7 +9,7 @@ Agents in Fish Tank have personalities, memories, and can make decisions using L
 ### Simple Random Agent (No LLM)
 
 ```bash
-uv run agent --agent-id a1
+uv run agent --agent-id scout
 ```
 
 ### LLM-Powered Agent
@@ -71,7 +71,7 @@ Agents remember:
 uv run agent-llm --help
 
 Options:
-  --agent-id TEXT        Agent ID (default: a1)
+  --agent-id TEXT        Agent ID (default: scout)
   --personality TEXT     Personality type (default: explorer)
                          Options: explorer, survivor, aggressive, cooperative, cautious
   --server-url TEXT      World server URL (default: http://localhost:3000)
@@ -120,7 +120,7 @@ TRAITS: Aggression: 0.2, Curiosity: 0.9...
 
 CURRENT SITUATION (Turn 42):
 STATUS: Health: 73/100, Hunger: 45/100
-VISIBLE ENTITIES: agent (a2) at [15, 10], HP: 60
+VISIBLE ENTITIES: agent (nomad) at [15, 10], HP: 60
 
 YOUR MEMORY: Visited 25 locations, Know about 1 other agents
 
