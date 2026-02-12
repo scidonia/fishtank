@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fish Tank Protocol Schemas",
+  "description": "Contract definitions for Fish Tank world server communication",
+  
+  "definitions": {
+    "Position": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[x, y] coordinates"
+    },
+    
+    "Direction": {
+      "type": "string",
+      "enum": ["N", "S", "E", "W", "NE", "NW", "SE", "SW"]
+    },
+    
+    "Entity": {
+      "type": "object",
+      "required": ["id", "type", "pos", "hp"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["agent", "rabbit", "deer"] },
+        "pos": { "$ref": "#/definitions/Position" },
+        "hp": { "type": "integer", "minimum": 0 }
+      }
+    },
+    
+    "ActionRequest": {
+      "type": "object",
+      "required": ["agent_id", "turn_id", "type"],
+      "properties": {
+        "agent_id": { "type": "string" },
+        "turn_id": { "type": "integer", "minimum": 0 },
+        "type": { "type": "string" },
+        "args": { "type": "object" }
+      }
+    },
+    
+    "ActionResponse": {
+      "type": "object",
+      "required": ["ok"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "error": { "type": "string" }
+      }
+    },
+    
+    "Observation": {
+      "type": "object",
+      "required": ["turn_id", "agent_id", "health", "hunger", "visible_tiles", "visible_entities", "recent_events", "action_space"],
+      "properties": {
+        "turn_id": { "type": "integer" },
+        "agent_id": { "type": "string" },
+        "health": { "type": "integer" },
+        "hunger": { "type": "integer" },
+        "visible_tiles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Array of strings representing visible tile rows"
+        },
+        "visible_entities": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Entity" }
+        },
+        "recent_events": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "action_space": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    
+    "SSEEvent": {
+      "type": "object",
+      "required": ["type", "data"],
+      "properties": {
+        "type": { "type": "string", "enum": ["snapshot", "delta", "public", "obs"] },
+        "data": { "type": "object" }
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fish Tank - World Viewer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🐠 Fish Tank World Viewer</h1>
+            <div class="connection-status">
+                <span id="status">Disconnected</span>
+                <button id="connect-btn">Connect</button>
+            </div>
+        </header>
+        
+        <main>
+            <div class="world-view">
+                <canvas id="world-canvas"></canvas>
+                <div id="hover-info" class="hover-info"></div>
+                <div class="viewport-controls">
+                    <button id="zoom-in">+</button>
+                    <button id="zoom-out">-</button>
+                    <button id="follow-agent">Follow Agent</button>
+                    <span id="camera-pos"></span>
+                </div>
+            </div>
+            
+            <aside class="sidebar">
+                <section class="stats-panel">
+                    <h2>World Stats</h2>
+                    <div id="world-stats">
+                        <p>Turn: <span id="turn-id">0</span></p>
+                        <p>Agents: <span id="agent-count">0</span></p>
+                        <p>Map: <span id="map-size">0×0</span></p>
+                        <p>Camera: <span id="camera-info">0, 0</span></p>
+                    </div>
+                </section>
+                
+                <section class="surveillance-panel">
+                    <h2>Surveillance</h2>
+                    <div id="agent-list"></div>
+                </section>
+                
+                <section class="agent-log-panel">
+                    <h2>Agent Log</h2>
+                    <div class="agent-log-info">Click an agent to view their thinking</div>
+                    <div id="agent-log-list"></div>
+                </section>
+                
+                <section class="event-log">
+                    <h2>Event Log</h2>
+                    <div id="event-list"></div>
+                </section>
+            </aside>
+        </main>
+    </div>
+    
+    <script src="viewer.js"></script>
+</body>
+</html>

@@ -1,14 +1,23 @@
 [project]
-name = "fishtank"
+name = "fishtank-runner"
 version = "0.1.0"
-description = "Add your description here"
+description = "Fish Tank Agent Runner - LLM-powered agent for turn-based simulation"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["runner"]
+
 [project.scripts]
-hello = "fishtank.main:main"
+agent = "runner.main:main"
+agent-llm = "runner.main_llm:main"
