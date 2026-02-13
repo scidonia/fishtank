@@ -7,7 +7,7 @@ class WorldViewer {
         this.ctx = this.canvas.getContext('2d');
         this.eventSource = null;
         this.worldState = null;
-        this.tileSize = 32;
+        this.tileSize = 48; // Increased from 32 to 48 for better visibility
         
         // Viewport/Camera
         this.camera = { x: 0, y: 0 };
@@ -61,7 +61,7 @@ class WorldViewer {
         }
         
         // Load entity sprites
-        const entities = ['agent', 'rabbit', 'deer'];
+        const entities = ['agent', 'rabbit', 'deer', 'warden', 'seeker', 'ranger', 'hunter'];
         for (const entity of entities) {
             const img = new Image();
             img.src = `tiles/entities/${entity}.png`;
@@ -155,7 +155,7 @@ class WorldViewer {
     }
     
     zoom(factor) {
-        this.tileSize = Math.max(16, Math.min(64, this.tileSize * factor));
+        this.tileSize = Math.max(24, Math.min(96, this.tileSize * factor)); // Increased range: 24-96 (was 16-64)
     }
     
     constrainCamera() {
@@ -284,6 +284,27 @@ class WorldViewer {
         
         this.updateStats();
         this.updateSurveillance();
+        
+        // Update agent info panel if we're watching an agent
+        if (this.focusedAgentId) {
+            const agent = this.worldState.entities?.find(e => e.id === this.focusedAgentId);
+            if (agent) {
+                // Refresh inventory display
+                const inventoryDisplay = document.getElementById('agent-inventory-display');
+                if (agent.inventory && agent.inventory.length > 0) {
+                    inventoryDisplay.innerHTML = agent.inventory.map((item, idx) => {
+                        const emoji = item.type === 'plant' ? '🌿' : '🥩';
+                        return `<div>${idx}: ${emoji} ${item.type} (+${item.energy} energy)</div>`;
+                    }).join('');
+                    inventoryDisplay.style.color = '#ccc';
+                    inventoryDisplay.style.fontStyle = 'normal';
+                } else {
+                    inventoryDisplay.textContent = '(No items)';
+                    inventoryDisplay.style.color = '#666';
+                    inventoryDisplay.style.fontStyle = 'italic';
+                }
+            }
+        }
     }
     
     handlePublicEvent(data) {
@@ -440,10 +461,15 @@ class WorldViewer {
             console.log(`Rendering ${entity.id} at tile [${x},${y}] -> pixel [${px},${py}]`);
         }
         
-        // Paper doll rendering for agents with appearance data
-        if (entity.type === 'agent' && entity.appearance) {
+        // Check for agent-specific sprite first
+        if (entity.type === 'agent' && this.tilesLoaded && this.tiles.entities[entity.id]) {
+            // Use agent-specific sprite (e.g., warden.png, seeker.png)
+            this.ctx.drawImage(this.tiles.entities[entity.id], px, py, this.tileSize, this.tileSize);
+        } else if (entity.type === 'agent' && entity.appearance) {
+            // Fallback to paper doll rendering for agents without custom sprites
             this.renderAgent(entity, px, py);
         } else if (this.tilesLoaded && this.tiles.entities[entity.type]) {
+            // Use generic type sprite (rabbit, deer)
             this.ctx.drawImage(this.tiles.entities[entity.type], px, py, this.tileSize, this.tileSize);
         } else {
             const colors = {
@@ -504,7 +530,8 @@ class WorldViewer {
         }
         
         if (entity.hp !== undefined) {
-            this.renderHealthBar(px + this.tileSize / 2, py + 2, entity.hp, 100);
+            const maxHp = entity.maxHp || 100; // Use entity's maxHp if available, default 100
+            this.renderHealthBar(px + this.tileSize / 2, py + 2, entity.hp, maxHp);
         }
     }
     
@@ -767,6 +794,24 @@ class WorldViewer {
         
         // Update agent ID
         document.getElementById('info-agent-id').textContent = agentId;
+        
+        // Update inventory from world state
+        const inventoryDisplay = document.getElementById('agent-inventory-display');
+        if (this.worldState && this.worldState.entities) {
+            const agent = this.worldState.entities.find(e => e.id === agentId);
+            if (agent && agent.inventory && agent.inventory.length > 0) {
+                inventoryDisplay.innerHTML = agent.inventory.map((item, idx) => {
+                    const emoji = item.type === 'plant' ? '🌿' : '🥩';
+                    return `<div>${idx}: ${emoji} ${item.type} (+${item.energy} energy)</div>`;
+                }).join('');
+                inventoryDisplay.style.color = '#ccc';
+                inventoryDisplay.style.fontStyle = 'normal';
+            } else {
+                inventoryDisplay.textContent = '(No items)';
+                inventoryDisplay.style.color = '#666';
+                inventoryDisplay.style.fontStyle = 'italic';
+            }
+        }
         
         // Update prompt
         const promptDisplay = document.getElementById('agent-prompt-display');

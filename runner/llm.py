@@ -30,7 +30,8 @@ class DeepSeekProvider(LLMProvider):
 
     async def generate(self, prompt: str, system_prompt: str) -> str:
         """Generate a response from DeepSeek API."""
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        timeout = httpx.Timeout(10.0, read=60.0, write=10.0, pool=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers={

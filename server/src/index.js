@@ -122,6 +122,30 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', turn: world.turnId });
 });
 
+// Archaeology API - Get all past runs
+app.get('/api/runs', (req, res) => {
+    try {
+        const runs = world.logger.getAllRuns();
+        res.json(runs);
+    } catch (error) {
+        console.error('Error fetching runs:', error);
+        res.status(500).json({ error: 'Failed to fetch runs' });
+    }
+});
+
+// Archaeology API - Get specific run details
+app.get('/api/runs/:runId', (req, res) => {
+    try {
+        const { runId } = req.params;
+        const events = world.logger.getRunEvents(runId);
+        const agents = world.logger.getAgentLifespans(runId);
+        res.json({ events, agents });
+    } catch (error) {
+        console.error('Error fetching run details:', error);
+        res.status(500).json({ error: 'Failed to fetch run details' });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`🐠 Fish Tank Server running on http://localhost:${PORT}`);
     console.log(`   Public stream:     http://localhost:${PORT}/stream/public`);
@@ -131,4 +155,21 @@ app.listen(PORT, () => {
     
     // Start the turn loop
     world.start();
+});
+
+// Graceful shutdown handler
+process.on('SIGINT', () => {
+    console.log('\n\nShutting down gracefully...');
+    world.running = false; // Stop turn loop
+    world.logger.endRun();
+    console.log('World run saved to database.');
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    console.log('\n\nShutting down gracefully...');
+    world.running = false; // Stop turn loop
+    world.logger.endRun();
+    console.log('World run saved to database.');
+    process.exit(0);
 });

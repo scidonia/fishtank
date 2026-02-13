@@ -60,8 +60,12 @@ class AgentConfig:
                 curiosity=0.4,
                 sociability=0.5,
                 caution=0.8,
-                primary_goal="stay alive as long as possible",
-                secondary_goals=["find food", "avoid danger", "build safe zones"],
+                primary_goal="thrive and prosper in this world",
+                secondary_goals=[
+                    "gather resources",
+                    "establish territory",
+                    "build safe zones",
+                ],
             ),
             AgentPersonality.AGGRESSIVE: cls(
                 agent_id=agent_id,
@@ -80,7 +84,7 @@ class AgentConfig:
                 curiosity=0.6,
                 sociability=0.9,
                 caution=0.5,
-                primary_goal="help others survive",
+                primary_goal="help others and build community",
                 secondary_goals=["make friends", "share resources", "protect allies"],
             ),
             AgentPersonality.CAUTIOUS: cls(
@@ -174,79 +178,105 @@ class AgentMemory:
         return "\n".join(parts) if parts else "No significant memories yet"
 
 
+def get_initial_personality_prompt(config: AgentConfig) -> str:
+    """Generate minimal initial prompt for agent (just trait values - agent defines the rest)."""
+    return f"""TRAITS:
+- Aggression: {config.aggression:.1f}
+- Curiosity: {config.curiosity:.1f}
+- Sociability: {config.sociability:.1f}
+- Caution: {config.caution:.1f}
+
+(Use edit_prompt to define your personality, goals, and strategies)
+"""
+
+
 def get_base_prompt(config: AgentConfig) -> str:
-    """Get the immutable base prompt for an agent."""
-    personality_descriptions = {
-        AgentPersonality.EXPLORER: "You are curious and adventurous, always seeking new areas to discover.",
-        AgentPersonality.SURVIVOR: "You are practical and cautious, focused on staying alive.",
-        AgentPersonality.AGGRESSIVE: "You are bold and confrontational, seeking to dominate.",
-        AgentPersonality.COOPERATIVE: "You are friendly and helpful, preferring collaboration.",
-        AgentPersonality.CAUTIOUS: "You are careful and risk-averse, avoiding danger at all costs.",
-    }
+    """Get the immutable base prompt (game mechanics only - no behavioral guidance)."""
+    return f"""You are {config.agent_id}, a {config.species} in a world with other agents and creatures.
 
-    return f"""You are {config.agent_id}, a {config.species} in a survival world.
+GAME MECHANICS:
 
-PERSONALITY: {personality_descriptions[config.personality]}
+TURN STRUCTURE:
+- You perform ONE action per turn
+- Energy decreases by 1 per turn
+- At 0 energy, you die
+- At 0 HP, you die
 
-TRAITS:
-- Aggression: {config.aggression:.1f} (how likely to fight)
-- Curiosity: {config.curiosity:.1f} (how likely to explore)
-- Sociability: {config.sociability:.1f} (how likely to interact with others)
-- Caution: {config.caution:.1f} (how careful you are)
+PERCEPTION:
+- You can see entities within 10 tile radius (Field of View)
+- You can only interact with ADJACENT entities (1 tile away in any direction)
+- Walls block movement
+- Other entities block movement (unless they also move)
 
-PRIMARY GOAL: {config.primary_goal}
-SECONDARY GOALS: {", ".join(config.secondary_goals) if config.secondary_goals else "None"}
+MOVEMENT:
+- Directions: N, S, E, W, NE, NW, SE, SW
+- Blocked by walls and other entities
 
-RELATIONSHIPS:
-- Allies: {", ".join(config.allies) if config.allies else "None yet"}
-- Enemies: {", ".join(config.enemies) if config.enemies else "None yet"}
+ACTIONS AVAILABLE:
+1. move {{"dir": "N|S|E|W|NE|NW|SE|SW"}} - Move one tile in specified direction
+2. forage {{}} - Collect adjacent food (plant/meat) and add to inventory (does not consume immediately)
+3. eat {{}} - Consume first item from your inventory to gain energy
+4. give {{"target_id": "agent_id", "item_index": 0}} - Give inventory item to adjacent agent (index optional, defaults to 0)
+5. attack {{"target_id": "agent_id"}} - Deal ~10 damage to adjacent entity
+6. talk {{"message": "text"}} - Broadcast message (heard within 10 tiles, max 200 chars)
+7. mate {{"partner_id": "agent_id"}} - Create offspring with adjacent agent (costs 20 energy each)
+8. edit_prompt {{"text": "your goals/identity"}} - Update your persistent prompt (always visible, max 300 chars)
+9. edit_notes {{"text": "private info"}} - Write private notes (only visible with read_notes, max 1000 chars)
+10. read_notes {{}} - Read your private notes
+11. read_prompt {{}} - Read your current persistent prompt
+12. wait {{}} - Do nothing this turn
 
-GAME RULES:
-1. You can only perform ONE action per turn
-2. You need food to survive (energy decreases each turn, starvation at 0)
-3. You can see entities and terrain around you within 10 tile radius (FOV)
-4. You can move in 8 directions: N, S, E, W, NE, NW, SE, SW
-5. Available actions: move, forage, attack, talk, mate, edit_prompt, edit_notes, read_notes, read_prompt, wait
-   - move: Move in a direction (requires "dir" arg) - can be blocked by walls/entities
-   - forage: Search for food nearby (within 1 tile). Plants give +20 energy, meat gives +50 energy.
-   - attack: Attack another agent (requires "target_id" arg) - must be within 1 tile, deals ~10 damage
-   - talk: Say something to nearby agents (requires "message" arg) - heard within 10 tiles
-   - mate: Create offspring with another agent (requires "partner_id" arg) - must be within 1 tile, costs 40 energy for each parent, offspring inherits fused traits
-   - edit_prompt: Set a persistent reminder (requires "text" arg) - always shown in observations
-   - edit_notes: Write private notes (requires "text" arg) - only shown when you read_notes
-   - read_notes: Read your private notes - use this to recall detailed information you've written
-   - read_prompt: Read your current persistent prompt
-   - wait: Do nothing this turn
+TEXT LIMITS:
+- talk messages: 200 characters maximum
+- edit_prompt text: 300 characters maximum
+- edit_notes text: 1000 characters maximum
+- If you exceed these limits, your text will be truncated and you'll be notified in LAST ACTION
+
+ENTITY TYPES:
+- agent: Other humans (100 HP, 100 energy)
+- rabbit: Small animal (20 HP, drops 30 energy meat when killed)
+- deer: Large animal (80 HP, drops 100 energy meat when killed)
+- plant: Vegetation (gives +20 energy when foraged)
+- meat: Corpse from dead entity (gives energy when foraged, decays over time)
+- bones: Decayed meat (no energy value)
+
+ENERGY & FOOD:
+- Plants: +20 energy
+- Meat: +30 to +100 energy depending on source
+- Foraging range: 1 tile (adjacent only)
+
+COMBAT:
+- Attack range: 1 tile (adjacent only)
+- Damage: ~10 HP per hit (agents always hit, animals have low hit chance)
+- Dead entities become meat
+
+REPRODUCTION:
+- Must be adjacent to partner
+- Costs 20 energy per parent
+- Offspring inherits combined traits from both parents
+
+MEMORY SYSTEM:
+- edit_prompt: Your persistent identity/goals (shown every turn, use to define yourself)
+- edit_notes: Private detailed information (only shown when you read_notes)
 
 OUTPUT FORMAT:
-You must respond with a JSON object containing your decision:
+Respond with JSON:
 {{
-    "action": "move|forage|attack|talk|mate|edit_prompt|edit_notes|read_notes|read_prompt|wait",
-    "args": {{"dir": "N"}} or {{"target_id": "a2"}} or {{"message": "text"}} or {{"text": "text"}} or {{}},
-    "reasoning": "Brief explanation of your decision"
+    "action": "action_name",
+    "args": {{required_args}},
+    "reasoning": "brief explanation"
 }}
 
-Example valid responses:
-- {{"action": "move", "args": {{"dir": "NE"}}, "reasoning": "Exploring northeast"}}
-- {{"action": "forage", "args": {{}}, "reasoning": "Searching for food, energy low"}}
-- {{"action": "attack", "args": {{"target_id": "a2"}}, "reasoning": "Defending territory"}}
-- {{"action": "talk", "args": {{"message": "Let's cooperate!"}}, "reasoning": "Proposing alliance"}}
-- {{"action": "mate", "args": {{"partner_id": "a2"}}, "reasoning": "Creating offspring with ally"}}
-- {{"action": "edit_prompt", "args": {{"text": "Primary goal: Find food source"}}, "reasoning": "Setting persistent reminder"}}
-- {{"action": "edit_notes", "args": {{"text": "a2 is friendly, wants to cooperate. Saw plant at [100,50]"}}, "reasoning": "Recording agent reputation and discoveries"}}
-- {{"action": "read_notes", "args": {{}}, "reasoning": "Checking what I know about other agents"}}
-- {{"action": "wait", "args": {{}}, "reasoning": "Observing the area"}}
+Examples:
+- {{"action": "move", "args": {{"dir": "N"}}, "reasoning": "Moving north"}}
+- {{"action": "forage", "args": {{}}, "reasoning": "Collecting adjacent plant"}}
+- {{"action": "eat", "args": {{}}, "reasoning": "Consuming food from inventory"}}
+- {{"action": "give", "args": {{"target_id": "ally_agent"}}, "reasoning": "Sharing food with ally"}}
+- {{"action": "attack", "args": {{"target_id": "hostile_agent"}}, "reasoning": "Defending myself"}}
+- {{"action": "talk", "args": {{"message": "Hello"}}, "reasoning": "Greeting nearby agents"}}
+- {{"action": "edit_prompt", "args": {{"text": "I am a peaceful explorer"}}, "reasoning": "Defining my identity"}}
 
-IMPORTANT: 
-- When energy is below 30, you should prioritize foraging!
-- If your last action failed (hit a wall/entity), try a different direction!
-- You can see walls in your FOV - avoid moving into them!
-- Attack range is only 1 tile (adjacent). Move close before attacking!
-- Mating costs 40 energy for each parent (very expensive) - only mate when you have plenty of energy!
-- Mating creates a new agent offspring that inherits traits from both parents!
-- Consider your personality: aggressive agents attack enemies, cooperative agents avoid combat!
-
-Make decisions that align with your personality and goals.
+Use your persistent prompt (edit_prompt) to define your personality, goals, and strategies.
 """
 
 
@@ -257,12 +287,23 @@ def get_observation_prompt(obs: Dict[str, Any], memory: AgentMemory) -> str:
     recent_events = obs.get("recent_events", [])
     last_action = obs.get("last_action_result")
 
+    inventory = obs.get("inventory", [])
+    inventory_str = f"{len(inventory)} items"
+    if inventory:
+        inventory_details = ", ".join(
+            [f"{item['type']}(+{item['energy']})" for item in inventory[:3]]
+        )
+        if len(inventory) > 3:
+            inventory_details += f", +{len(inventory) - 3} more"
+        inventory_str = f"{len(inventory)} items ({inventory_details})"
+
     prompt = f"""CURRENT SITUATION (Turn {obs["turn_id"]}):
 
 STATUS:
 - Position: {obs.get("position", "unknown")}
 - Health: {obs["health"]}/100
 - Energy: {obs.get("energy", obs.get("hunger", 100))}/100 {"⚠️ CRITICAL!" if obs.get("energy", obs.get("hunger", 100)) < 20 else ""}
+- Inventory: {inventory_str}
 
 """
 
@@ -270,6 +311,9 @@ STATUS:
     if last_action:
         if last_action.get("success"):
             prompt += f"LAST ACTION: ✓ {last_action.get('message', 'Success')}\n"
+            # Show explicit truncation warning if text was truncated
+            if last_action.get("truncated"):
+                prompt += f"  ⚠️ WARNING: Text was TRUNCATED from {last_action.get('original_length')} to {last_action.get('max_length')} characters\n"
         else:
             prompt += f"LAST ACTION: ✗ FAILED - {last_action.get('message', 'Failed')} (reason: {last_action.get('reason', 'unknown')})\n"
             prompt += "  → You need to try a different action/direction!\n"

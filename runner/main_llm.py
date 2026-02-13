@@ -122,6 +122,22 @@ class LLMAgentRunner:
         self.turn_count += 1
 
         turn_id = obs["turn_id"]
+
+        # Set initial personality prompt on first observation if empty
+        if self.turn_count == 1 and not obs.get("prompt"):
+            from agent import get_initial_personality_prompt
+
+            initial_prompt = get_initial_personality_prompt(self.config)
+            await self.submit_action(
+                client,
+                turn_id,
+                {
+                    "action": "edit_prompt",
+                    "args": {"text": initial_prompt},
+                    "reasoning": "Setting initial traits",
+                },
+            )
+            return
         health = obs["health"]
         energy = obs.get(
             "energy", obs.get("hunger", 100)

@@ -5,11 +5,14 @@ import random
 
 
 def generate_map(width: int = 1000, height: int = 1000, seed: int = 42) -> list[str]:
-    """Generate a more open map with scattered obstacles instead of corridors."""
+    """Generate a more open map with scattered obstacles and house structures."""
     random.seed(seed)
 
     # Initialize with floors (inverted from before!)
     map_data = [["." for _ in range(width)] for _ in range(height)]
+
+    # Track house locations to avoid overwriting them
+    house_zones = []
 
     # Add border walls
     for x in range(width):
@@ -19,49 +22,21 @@ def generate_map(width: int = 1000, height: int = 1000, seed: int = 42) -> list[
         map_data[y][0] = "#"
         map_data[y][width - 1] = "#"
 
-    # Add scattered wall clusters (like rocks, pillars, etc.)
-    num_clusters = 200  # More clusters but smaller
-
-    for _ in range(num_clusters):
-        cx = random.randint(10, width - 10)
-        cy = random.randint(10, height - 10)
-        cluster_size = random.randint(3, 12)  # Varied sizes
-
-        # Create irregular wall cluster
-        for dy in range(-cluster_size, cluster_size + 1):
-            for dx in range(-cluster_size, cluster_size + 1):
-                x = cx + dx
-                y = cy + dy
-
-                if 1 <= x < width - 1 and 1 <= y < height - 1:
-                    dist = (dx * dx + dy * dy) ** 0.5
-                    # Only place walls in roughly circular cluster, with randomness
-                    if dist < cluster_size and random.random() < 0.4:
-                        map_data[y][x] = "#"
-
-    # Add some larger open "clearings" by removing walls
-    num_clearings = 30
-    for _ in range(num_clearings):
-        cx = random.randint(50, width - 50)
-        cy = random.randint(50, height - 50)
-        clearing_radius = random.randint(15, 35)
-
-        for dy in range(-clearing_radius, clearing_radius + 1):
-            for dx in range(-clearing_radius, clearing_radius + 1):
-                x = cx + dx
-                y = cy + dy
-
-                if 1 <= x < width - 1 and 1 <= y < height - 1:
-                    dist = (dx * dx + dy * dy) ** 0.5
-                    if dist < clearing_radius:
-                        map_data[y][x] = "."
-
-    # Add house structures scattered across the map
+    # FIRST: Define house generation function and track locations
     def add_house(cx: int, cy: int, house_width: int, house_height: int):
         """Add a rectangular house with walls and interior floor space."""
-        # Clear the entire area first
-        for y in range(cy - 1, cy + house_height + 2):
-            for x in range(cx - 1, cx + house_width + 2):
+        # Track this house zone
+        house_zones.append((cx, cy, house_width, house_height))
+
+        # Clear the entire area around the house first
+        for y in range(cy - 2, cy + house_height + 2):
+            for x in range(cx - 2, cx + house_width + 2):
+                if 1 <= x < width - 1 and 1 <= y < height - 1:
+                    map_data[y][x] = "."
+
+        # Fill interior with floor
+        for y in range(cy, cy + house_height):
+            for x in range(cx, cx + house_width):
                 if 1 <= x < width - 1 and 1 <= y < height - 1:
                     map_data[y][x] = "."
 
@@ -95,7 +70,7 @@ def generate_map(width: int = 1000, height: int = 1000, seed: int = 42) -> list[
             if 1 <= door_y < height - 1:
                 map_data[door_y][cx] = "."
 
-    # Generate houses of various sizes
+    # Generate houses of various sizes FIRST (before clearings)
     num_houses = 50
     house_sizes = [
         (6, 6),  # Small hut
@@ -112,6 +87,63 @@ def generate_map(width: int = 1000, height: int = 1000, seed: int = 42) -> list[
         cx = random.randint(50, width - house_width - 50)
         cy = random.randint(50, height - house_height - 50)
         add_house(cx, cy, house_width, house_height)
+
+    print(f"  Generated {len(house_zones)} houses")
+
+    # Add scattered wall clusters (like rocks, pillars, etc.) - avoid houses
+    num_clusters = 200  # More clusters but smaller
+
+    for _ in range(num_clusters):
+        cx = random.randint(10, width - 10)
+        cy = random.randint(10, height - 10)
+        cluster_size = random.randint(3, 12)  # Varied sizes
+
+        # Create irregular wall cluster
+        for dy in range(-cluster_size, cluster_size + 1):
+            for dx in range(-cluster_size, cluster_size + 1):
+                x = cx + dx
+                y = cy + dy
+
+                if 1 <= x < width - 1 and 1 <= y < height - 1:
+                    # Don't place clusters in/near houses
+                    in_house = False
+                    for hx, hy, hw, hh in house_zones:
+                        if hx - 3 <= x <= hx + hw + 3 and hy - 3 <= y <= hy + hh + 3:
+                            in_house = True
+                            break
+
+                    if not in_house:
+                        dist = (dx * dx + dy * dy) ** 0.5
+                        # Only place walls in roughly circular cluster, with randomness
+                        if dist < cluster_size and random.random() < 0.4:
+                            map_data[y][x] = "#"
+
+    # Add some larger open "clearings" by removing walls - avoid houses
+    num_clearings = 30
+    for _ in range(num_clearings):
+        cx = random.randint(50, width - 50)
+        cy = random.randint(50, height - 50)
+        clearing_radius = random.randint(15, 35)
+
+        for dy in range(-clearing_radius, clearing_radius + 1):
+            for dx in range(-clearing_radius, clearing_radius + 1):
+                x = cx + dx
+                y = cy + dy
+
+                if 1 <= x < width - 1 and 1 <= y < height - 1:
+                    dist = (dx * dx + dy * dy) ** 0.5
+                    if dist < clearing_radius:
+                        # Don't clear if this is a house zone
+                        in_house = False
+                        for hx, hy, hw, hh in house_zones:
+                            if (
+                                hx - 2 <= x <= hx + hw + 2
+                                and hy - 2 <= y <= hy + hh + 2
+                            ):
+                                in_house = True
+                                break
+                        if not in_house:
+                            map_data[y][x] = "."
 
     # Convert to strings
     return ["".join(row) for row in map_data]

@@ -10,13 +10,46 @@
     <div class="container">
         <header>
             <h1>🐠 Fish Tank World Viewer</h1>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('world')">World</button>
+                <button class="tab-btn" onclick="switchTab('actions')">Actions</button>
+            </div>
             <div class="connection-status">
                 <span id="status">Disconnected</span>
                 <button id="connect-btn">Connect</button>
             </div>
         </header>
         
-        <main>
+        <main id="world-tab" class="tab-content">
+            <aside class="sidebar sidebar-left">
+                <section class="surveillance-panel collapsible">
+                    <h2 class="collapsible-header" onclick="toggleSection(this)">
+                        <span class="collapse-icon">▼</span> Surveillance
+                    </h2>
+                    <div id="agent-list" class="collapsible-content"></div>
+                </section>
+                
+                <section class="agent-info-panel collapsible" id="agent-info-panel" style="display: none;">
+                    <h2 class="collapsible-header" onclick="toggleSection(this)">
+                        <span class="collapse-icon">▼</span> Agent Info: <span id="info-agent-id"></span>
+                    </h2>
+                    <div class="collapsible-content">
+                        <div class="agent-info-section">
+                            <h3>Inventory</h3>
+                            <div id="agent-inventory-display" class="info-content">(No items)</div>
+                        </div>
+                        <div class="agent-info-section">
+                            <h3>Persistent Prompt</h3>
+                            <div id="agent-prompt-display" class="info-content">(No prompt set)</div>
+                        </div>
+                        <div class="agent-info-section">
+                            <h3>Private Notes</h3>
+                            <div id="agent-notes-display" class="info-content">(No notes)</div>
+                        </div>
+                    </div>
+                </section>
+            </aside>
+            
             <div class="world-view">
                 <canvas id="world-canvas"></canvas>
                 <div id="hover-info" class="hover-info"></div>
@@ -28,61 +61,180 @@
                 </div>
             </div>
             
-            <aside class="sidebar">
-                <section class="surveillance-panel">
-                    <h2>Surveillance</h2>
-                    <div id="agent-list"></div>
-                </section>
-                
-                <section class="agent-info-panel" id="agent-info-panel" style="display: none;">
-                    <h2>Agent Info: <span id="info-agent-id"></span></h2>
-                    <div class="agent-info-section">
-                        <h3>Persistent Prompt</h3>
-                        <div id="agent-prompt-display" class="info-content">(No prompt set)</div>
-                    </div>
-                    <div class="agent-info-section">
-                        <h3>Private Notes</h3>
-                        <div id="agent-notes-display" class="info-content">(No notes)</div>
+            <aside class="sidebar sidebar-right">
+                <section class="agent-log-panel collapsible">
+                    <h2 class="collapsible-header" onclick="toggleSection(this)">
+                        <span class="collapse-icon">▼</span> Agent Log
+                        <button id="view-prompt-btn" style="display: none; margin-left: auto;">View Prompt</button>
+                    </h2>
+                    <div class="collapsible-content">
+                        <div class="agent-log-info">Click an agent to view their thinking</div>
+                        <div id="agent-log-list"></div>
                     </div>
                 </section>
                 
-                <section class="agent-log-panel">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <h2>Agent Log</h2>
-                        <button id="view-prompt-btn" style="display: none;">View Prompt</button>
-                    </div>
-                    <div class="agent-log-info">Click an agent to view their thinking</div>
-                    <div id="agent-log-list"></div>
+                <section class="event-log collapsible">
+                    <h2 class="collapsible-header" onclick="toggleSection(this)">
+                        <span class="collapse-icon">▼</span> Event Log
+                    </h2>
+                    <div id="event-list" class="collapsible-content"></div>
                 </section>
-                
-                <!-- Prompt Modal -->
-                <div id="prompt-modal" class="modal" style="display: none;">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h2>Agent Prompts: <span id="prompt-agent-id"></span></h2>
-                            <button class="modal-close" onclick="document.getElementById('prompt-modal').style.display='none'">&times;</button>
+            </aside>
+            
+            <!-- Prompt Modal -->
+            <div id="prompt-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Agent Prompts: <span id="prompt-agent-id"></span></h2>
+                        <button class="modal-close" onclick="document.getElementById('prompt-modal').style.display='none'">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="prompt-section">
+                            <h3>Base Prompt (Personality & Rules)</h3>
+                            <pre id="base-prompt-content"></pre>
                         </div>
-                        <div class="modal-body">
-                            <div class="prompt-section">
-                                <h3>Base Prompt (Personality & Rules)</h3>
-                                <pre id="base-prompt-content"></pre>
-                            </div>
-                            <div class="prompt-section">
-                                <h3>Latest Observation Prompt</h3>
-                                <pre id="obs-prompt-content"></pre>
-                            </div>
+                        <div class="prompt-section">
+                            <h3>Latest Observation Prompt</h3>
+                            <pre id="obs-prompt-content"></pre>
                         </div>
                     </div>
                 </div>
-                
-                <section class="event-log">
-                    <h2>Event Log</h2>
-                    <div id="event-list"></div>
-                </section>
-            </aside>
+            </div>
         </main>
+        
+        <div id="actions-tab" class="tab-content" style="display: none;">
+            <div class="actions-reference">
+                <h2>Available Actions</h2>
+                
+                <div class="action-card">
+                    <h3>move</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{"dir": "N|S|E|W|NE|NW|SE|SW"}</code>
+                    </div>
+                    <p class="action-description">Move one tile in the specified direction. Can be blocked by walls or other entities.</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>forage</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{}</code>
+                    </div>
+                    <p class="action-description">Collect adjacent food (plant or meat) and add it to your inventory. Does not consume immediately.</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>eat</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{}</code>
+                    </div>
+                    <p class="action-description">Consume the first item from your inventory to gain energy. Plants give +20 energy, meat varies (+30-100).</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>give</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{"target_id": "agent_id", "item_index": 0}</code>
+                    </div>
+                    <p class="action-description">Give an inventory item to an adjacent agent. item_index is optional (defaults to 0 = first item).</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>attack</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{"target_id": "agent_id"}</code>
+                    </div>
+                    <p class="action-description">Deal ~10 damage to an adjacent entity. Can attack agents, rabbits (20 HP), or deer (80 HP). Dead entities become forageable meat.</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>talk</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{"message": "text"}</code>
+                    </div>
+                    <p class="action-description">Broadcast a message that can be heard by all agents within 10 tiles.</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>mate</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{"partner_id": "agent_id"}</code>
+                    </div>
+                    <p class="action-description">Create offspring with an adjacent agent. Costs 20 energy for each parent. Offspring inherits combined traits.</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>edit_prompt</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{"text": "your goals/identity"}</code>
+                    </div>
+                    <p class="action-description">Update your persistent prompt. This text is shown in every observation and should contain your personality, goals, and strategies.</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>edit_notes</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{"text": "private info"}</code>
+                    </div>
+                    <p class="action-description">Write private notes. Only visible when you use read_notes. Use for detailed observations and information.</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>read_notes</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{}</code>
+                    </div>
+                    <p class="action-description">Read your private notes to recall detailed information you've written.</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>read_prompt</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{}</code>
+                    </div>
+                    <p class="action-description">Read your current persistent prompt to review your goals.</p>
+                </div>
+                
+                <div class="action-card">
+                    <h3>wait</h3>
+                    <div class="action-args">
+                        <strong>Args:</strong> <code>{}</code>
+                    </div>
+                    <p class="action-description">Do nothing this turn. Useful for conserving resources or observing the situation.</p>
+                </div>
+            </div>
+        </div>
     </div>
     
+    <script>
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            
+            if (tabName === 'world') {
+                document.getElementById('world-tab').style.display = 'grid';
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            } else if (tabName === 'actions') {
+                document.getElementById('actions-tab').style.display = 'block';
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            }
+        }
+        
+        function toggleSection(header) {
+            const section = header.parentElement;
+            const content = section.querySelector('.collapsible-content');
+            const icon = header.querySelector('.collapse-icon');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.textContent = '▼';
+                section.classList.remove('collapsed');
+            } else {
+                content.style.display = 'none';
+                icon.textContent = '▶';
+                section.classList.add('collapsed');
+            }
+        }
+    </script>
     <script src="viewer.js"></script>
 </body>
 </html>
