@@ -13,6 +13,7 @@ class AgentPersonality(Enum):
     AGGRESSIVE = "aggressive"
     COOPERATIVE = "cooperative"
     CAUTIOUS = "cautious"
+    BREEDER = "breeder"
 
 
 @dataclass
@@ -96,6 +97,21 @@ class AgentConfig:
                 caution=0.9,
                 primary_goal="avoid all risks",
                 secondary_goals=["find safe hiding spots", "scout carefully"],
+            ),
+            AgentPersonality.BREEDER: cls(
+                agent_id=agent_id,
+                personality=personality,
+                aggression=0.1,
+                curiosity=0.7,
+                sociability=0.9,
+                caution=0.3,
+                primary_goal="find compatible partners and create offspring using the mate action",
+                secondary_goals=[
+                    "maintain high energy for reproduction",
+                    "coordinate with partners to be adjacent",
+                    "use mate action with partner_id when ready",
+                    "build thriving population",
+                ],
             ),
         }
         return configs[personality]

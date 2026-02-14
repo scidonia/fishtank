@@ -96,6 +96,10 @@ class NarratorAgent:
             if event_summary == "narrative":
                 return  # Don't process our own narratives
 
+            # Highlight mating events (important!)
+            if event_summary == "mate":
+                console.print(f"[green]💕 {message[:100]}[/green]")
+
             # Check if we've advanced to a new turn
             if event_turn > self.last_turn:
                 # Generate narrative for previous turn before processing new turn events

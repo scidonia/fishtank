@@ -125,11 +125,12 @@ class AgentLauncher:
             self.server_url,
         ]
 
-        # TODO: Add support for avatar and starting_prompt once implemented in main_llm.py
+        # TODO: Add support for avatar once implemented in main_llm.py
         # if avatar:
         #     cmd.extend(["--avatar", avatar])
-        # if starting_prompt:
-        #     cmd.extend(["--starting-prompt", starting_prompt])
+
+        if starting_prompt:
+            cmd.extend(["--starting-prompt", starting_prompt])
 
         if use_mock:
             cmd.append("--use-mock")

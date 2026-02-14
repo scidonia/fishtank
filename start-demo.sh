@@ -10,9 +10,9 @@ echo ""
 # Kill any existing processes
 echo "Cleaning up any existing processes..."
 pkill -f "node src/index.js" 2>/dev/null || true
-pkill -f "python -m http.server 8080" 2>/dev/null || true
+pkill -f "python -m http.server 8081" 2>/dev/null || true
 lsof -ti:3000 | xargs kill -9 2>/dev/null || true
-lsof -ti:8080 | xargs kill -9 2>/dev/null || true
+lsof -ti:8081 | xargs kill -9 2>/dev/null || true
 sleep 1
 
 # Start world server
@@ -33,9 +33,9 @@ for i in {1..10}; do
 done
 
 # Start viewer HTTP server
-echo "Starting viewer on port 8080..."
+echo "Starting viewer on port 8081..."
 cd viewer
-python -m http.server 8080 > /tmp/fishtank-viewer.log 2>&1 &
+python -m http.server 8081 > /tmp/fishtank-viewer.log 2>&1 &
 VIEWER_PID=$!
 cd ..
 
@@ -44,7 +44,7 @@ echo "✓ Fish Tank is running!"
 echo ""
 echo "═══════════════════════════════════════"
 echo "  World Server: http://localhost:3000"
-echo "  Viewer:       http://localhost:8080"
+echo "  Viewer:       http://localhost:8081"
 echo "═══════════════════════════════════════"
 echo ""
 echo "To run agents in new terminals:"
@@ -62,7 +62,7 @@ cleanup() {
     kill $SERVER_PID 2>/dev/null || true
     kill $VIEWER_PID 2>/dev/null || true
     pkill -f "node src/index.js" 2>/dev/null || true
-    pkill -f "python -m http.server 8080" 2>/dev/null || true
+    pkill -f "python -m http.server 8081" 2>/dev/null || true
     echo "✓ Stopped"
     exit 0
 }

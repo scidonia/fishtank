@@ -33,11 +33,13 @@ class LLMAgentRunner:
         server_url: str = "http://localhost:3000",
         use_mock_llm: bool = False,
         debug_prompts: bool = False,
+        starting_prompt: Optional[str] = None,
     ):
         self.config = config
         self.server_url = server_url
         self.use_mock_llm = use_mock_llm
         self.debug_prompts = debug_prompts
+        self.starting_prompt = starting_prompt
 
         self.memory = AgentMemory()
         self.base_prompt = get_base_prompt(config)
@@ -127,14 +129,21 @@ class LLMAgentRunner:
         if self.turn_count == 1 and not obs.get("prompt"):
             from agent import get_initial_personality_prompt
 
-            initial_prompt = get_initial_personality_prompt(self.config)
+            # Use starting_prompt if provided, otherwise use personality default
+            if self.starting_prompt:
+                initial_prompt = self.starting_prompt
+                reasoning = "Setting custom starting prompt"
+            else:
+                initial_prompt = get_initial_personality_prompt(self.config)
+                reasoning = "Setting initial traits"
+
             await self.submit_action(
                 client,
                 turn_id,
                 {
                     "action": "edit_prompt",
                     "args": {"text": initial_prompt},
-                    "reasoning": "Setting initial traits",
+                    "reasoning": reasoning,
                 },
             )
             return
@@ -183,6 +192,7 @@ class LLMAgentRunner:
 
         # Make decision using LLM
         try:
+            assert self.decision_maker is not None, "Decision maker not initialized"
             decision = await self.decision_maker.decide(self.base_prompt, obs_prompt)
 
             reasoning = decision.get("reasoning", "No reasoning provided")
@@ -381,6 +391,8 @@ def main(
     personality: str = "explorer",
     server_url: str = "http://localhost:3000",
     use_mock: bool = False,
+    debug_prompts: bool = False,
+    starting_prompt: Optional[str] = None,
 ) -> None:
     """
     Run a Fish Tank agent with LLM-powered decision making.
@@ -390,9 +402,11 @@ def main(
 
     Args:
         agent_id: Agent ID to use
-        personality: Agent personality (explorer, survivor, aggressive, cooperative, cautious)
+        personality: Agent personality (explorer, survivor, aggressive, cooperative, cautious, breeder)
         server_url: World server URL
         use_mock: Use mock LLM instead of DeepSeek
+        debug_prompts: Print full prompts for debugging
+        starting_prompt: Initial persistent prompt to set on turn 1 (overrides personality default)
     """
     # Debug all parameters
     console.print(
@@ -404,12 +418,14 @@ def main(
     except (ValueError, AttributeError) as e:
         error_console.print(
             f"Invalid personality: {personality} (error: {e})\n"
-            f"Valid options: explorer, survivor, aggressive, cooperative, cautious"
+            f"Valid options: explorer, survivor, aggressive, cooperative, cautious, breeder"
         )
         sys.exit(1)
 
     config = AgentConfig.from_personality(agent_id, personality_enum)
-    runner = LLMAgentRunner(config, server_url, use_mock)
+    runner = LLMAgentRunner(
+        config, server_url, use_mock, debug_prompts, starting_prompt
+    )
 
     try:
         asyncio.run(runner.run())

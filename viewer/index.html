@@ -265,7 +265,14 @@
                 // Initialize archaeology viewer on first view
                 if (typeof window.archaeologyInitialized === 'undefined') {
                     window.archaeologyInitialized = true;
-                    initArchaeology();
+                    console.log('Calling initArchaeology...');
+                    if (typeof initArchaeology === 'function') {
+                        initArchaeology();
+                    } else {
+                        console.error('initArchaeology is not defined! Type:', typeof initArchaeology);
+                        document.getElementById('archaeology-runs-list').innerHTML = 
+                            '<div class="error">ERROR: archaeology.js failed to load</div>';
+                    }
                 }
             }
         }

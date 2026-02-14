@@ -1,0 +1,19 @@
+# Mating Test Configuration
+# Small group of cooperative agents to test if they discover and use the mate action
+
+use_mock: false
+narrator: true
+
+agents:
+  # Just 4 cooperative agents - more likely to coordinate and experiment
+  - id: adam
+    personality: cooperative
+  
+  - id: eve  
+    personality: cooperative
+  
+  - id: romeo
+    personality: cooperative
+  
+  - id: juliet
+    personality: cooperative

@@ -1,144 +1,142 @@
 # Fish Tank - Quick Reference
 
-## Start Everything
+## 🚀 Start Everything
 
 ```bash
+cd /home/gavin/dev/Scidonia/fishtank
+export DEEPSEEK_API_KEY="your-key"
 ./start-demo.sh
 ```
 
 Then:
-1. Open http://localhost:8080
-2. Click "Connect"
-3. Run agents: `uv run agent --agent-id scout`
+1. Open **http://localhost:8081**
+2. Run agents: `uv run python launcher.py --config agents.yaml`
 
-## Stop Everything
-
-```bash
-./stop-all.sh
-```
-
-Or press `Ctrl+C` in the terminal running `start-demo.sh`
-
-## Common Commands
-
-**Check if running:**
-```bash
-curl http://localhost:3000/health
-lsof -i:3000  # World server
-lsof -i:8080  # Viewer
-```
-
-**View logs:**
-```bash
-tail -f /tmp/fishtank-server.log
-tail -f /tmp/fishtank-viewer.log
-```
-
-**Run multiple agents:**
-```bash
-uv run agent --agent-id scout &
-uv run agent --agent-id nomad &
-uv run agent --agent-id warden &
-uv run agent --agent-id a3 &
-```
-
-**Regenerate map:**
-```bash
-cd shared
-python3 generate_map.py
-cd ..
-```
-
-## Viewer Controls
-
-**Mouse:**
-- Click & Drag → Pan camera
-- Hover → Show tooltips
-
-**Keyboard:**
-- Arrow Keys → Move camera
-
-**Buttons:**
-- `+` / `-` → Zoom
-- "Follow Agent" → Auto-track first agent
-- Click agent in sidebar → Follow that agent
-
-## Port Issues
-
-If you get "Address already in use":
+## 🛑 Stop Everything
 
 ```bash
 ./stop-all.sh
 ```
 
-Manual cleanup:
+## 🐟 Launch Agents
+
 ```bash
-lsof -ti:3000 | xargs kill -9
-lsof -ti:8080 | xargs kill -9
+# Multiple agents from config
+uv run python launcher.py --config agents.yaml
+
+# Single agent with LLM
+uv run python runner/main_llm.py --agent-id scout --personality explorer
+
+# Mock LLM (no API key needed)
+uv run python runner/main_llm.py --agent-id test --personality explorer --use-mock
 ```
 
-## File Locations
+## 💕 Test Mating
 
-**Key Files:**
-- `server/src/world.js` - World simulation
-- `runner/main.py` - Agent runner
-- `viewer/viewer.js` - Viewer with viewport
-- `shared/map.txt` - 1000×1000 map
-
-**Documentation:**
-- `README.md` - Full documentation
-- `WHERE_WE_ARE.txt` - Quick status
-- `STATUS.md` - Comprehensive status
-- `DEVELOPMENT_CHECKLIST.md` - Progress tracker
-
-**Scripts:**
-- `./start-demo.sh` - Start everything
-- `./stop-all.sh` - Stop everything
-- `shared/generate_map.py` - Generate new map
-
-## API Endpoints
-
-**SSE Streams:**
-- `http://localhost:3000/stream/public` - Public world state
-- `http://localhost:3000/stream/agent?agent_id=X` - Private observations
-
-**Actions:**
-- `http://localhost:3000/act` - Submit agent action (POST)
-
-**Health:**
-- `http://localhost:3000/health` - Server health check
-
-## Quick Debugging
-
-**Server not starting:**
 ```bash
-cd server && npm install
+./stop-all.sh
+cd server && npm start &
+cd ../viewer && python -m http.server 8081 &
+cd .. && uv run python runner/narrator_agent.py &
+sleep 5
+uv run python launcher.py --config breeding_test.yaml
+
+# Watch for mating events
+tail -f /tmp/narrator.log | grep -E "💕|mate"
 ```
 
-**Agent not starting:**
+## 📋 View Logs
+
 ```bash
-uv sync
+tail -f /tmp/fishtank-server.log  # Server
+tail -f /tmp/narrator.log         # Narrator  
+tail -f /tmp/adam.log              # Specific agent
 ```
 
-**Tiles not loading:**
+## 🔍 Health Check
+
 ```bash
-ls viewer/tiles/floor/
-ls viewer/tiles/wall/
-ls viewer/tiles/entities/
+curl http://localhost:3000/health           # Server
+curl http://localhost:8081                  # Viewer
+pgrep -f narrator_agent && echo "Running"   # Narrator
+pgrep -f main_llm | wc -l                   # Agent count
 ```
 
-**Map not found:**
+## 🎮 Personalities
+
+| Personality | Goal | Traits |
+|-------------|------|--------|
+| `explorer` | Explore map | High curiosity, low aggression |
+| `survivor` | Stay alive | Practical, finds food |
+| `aggressive` | Dominate | High aggression, attacks |
+| `cooperative` | Help others | High sociability, shares |
+| `cautious` | Avoid risks | High caution, defensive |
+| `breeder` | Reproduce | Seeks partners, mates |
+
+## 📊 Ports
+
+| Service | Port | URL |
+|---------|------|-----|
+| Server | 3000 | http://localhost:3000 |
+| Viewer | 8081 | http://localhost:8081 |
+
+## 🐛 Quick Fixes
+
 ```bash
-ls -lh shared/map.txt
-cd shared && python3 generate_map.py
+# Server not responding
+cd server && npm start
+
+# Port in use
+lsof -i:3000 | grep node | awk '{print $2}' | xargs kill
+
+# Viewer not loading
+pkill -f "http.server.*8081"
+cd viewer && python -m http.server 8081 &
+
+# No narratives
+pkill -f narrator_agent
+uv run python runner/narrator_agent.py &
+
+# Agent timeout
+# Check: tail -f /tmp/<agent-id>.log
+# Solution: Wait or restart agent
 ```
 
-## Next Steps
+## 📁 Config Files
 
-See `DEVELOPMENT_CHECKLIST.md` for implementation roadmap.
+- `agents.yaml` - 10 diverse agents (default)
+- `breeding_test.yaml` - 2 agents for mating test
+- `test_agents.yaml` - Simple test config
 
-**Priority features:**
-1. Combat system
-2. Food/items
-3. Line-of-sight
-4. LLM integration
+## 🔑 Environment
+
+```bash
+# Required for real LLM
+export DEEPSEEK_API_KEY="sk-xxxxxxxxxxxxx"
+
+# Optional
+export FISH_TANK_SERVER="http://localhost:3000"
+```
+
+## 🎯 Mating Requirements
+
+1. Both agents **adjacent** (1 tile apart)
+2. Both have **20+ energy**
+3. Use action: `{"action": "mate", "args": {"partner_id": "other_id"}}`
+
+## 📝 Custom Agent
+
+```bash
+uv run python runner/main_llm.py \
+  --agent-id myagent \
+  --personality explorer \
+  --starting-prompt "Your custom instructions here"
+```
+
+## 📚 Full Documentation
+
+- `STARTUP_RUNBOOK.md` - Complete operational guide
+- `AGENTS.md` - Agent system documentation
+- `SESSION_SUMMARY.md` - Recent changes
+- `DEVELOPMENT_CHECKLIST.md` - Implementation status
+- `README.md` - Project overview

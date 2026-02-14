@@ -1464,7 +1464,8 @@ export class WorldServer {
         }
         
         // Fuse prompts from parents (if they have any)
-        const fusedPrompt = this.fusePrompts(agent.prompt, partner.prompt);
+        const fusedPrompt = await this.fusePrompts(agent.prompt, partner.prompt);
+        console.log(`  📝 Fused prompt for offspring: "${fusedPrompt}"`);
         
         // Generate a personality-based name for the offspring
         const childName = await this.generateOffspringName(agent.id, partner.id, fusedPrompt);
@@ -1494,39 +1495,77 @@ export class WorldServer {
         };
     }
     
-    fusePrompts(prompt1, prompt2) {
+    async fusePrompts(prompt1, prompt2) {
         // If neither parent has a prompt, return empty
         if (!prompt1 && !prompt2) return '';
         
-        // If only one parent has a prompt, use it
-        if (!prompt1) return prompt2;
-        if (!prompt2) return prompt1;
+        // If only one parent has a prompt, return it (or use LLM to generalize)
+        if (!prompt1) return prompt2.substring(0, 300);
+        if (!prompt2) return prompt1.substring(0, 300);
         
-        // Both parents have prompts - create a fusion
-        // Simple approach: combine key phrases/concepts
-        const words1 = prompt1.split(/\s+/).filter(w => w.length > 3);
-        const words2 = prompt2.split(/\s+/).filter(w => w.length > 3);
+        // Both parents have prompts - use LLM to intelligently fuse them
+        const apiKey = process.env.DEEPSEEK_API_KEY;
         
-        // Take important words from both (max 20 words, 200 chars)
-        const combinedWords = [];
-        const maxWords = 20;
-        const step = Math.ceil(Math.max(words1.length, words2.length) / maxWords * 2);
-        
-        for (let i = 0; i < maxWords / 2 && i * step < words1.length; i++) {
-            combinedWords.push(words1[i * step]);
-        }
-        for (let i = 0; i < maxWords / 2 && i * step < words2.length; i++) {
-            combinedWords.push(words2[i * step]);
+        // Fallback to simple fusion if no API key
+        if (!apiKey) {
+            console.log('  No DEEPSEEK_API_KEY set, using simple prompt fusion');
+            return `Born from two agents. Inherited mixed traits from both parents.`;
         }
         
-        let fused = `Inherited traits: ${combinedWords.join(' ')}`;
-        
-        // Truncate to 300 chars (prompt limit)
-        if (fused.length > 300) {
-            fused = fused.substring(0, 297) + '...';
+        try {
+            const llmPrompt = `You are creating an inherited personality prompt for an offspring agent in a survival simulation.
+
+PARENT 1 PROMPT:
+${prompt1}
+
+PARENT 2 PROMPT:
+${prompt2}
+
+TASK: Create a NEW prompt for their offspring that:
+1. Inherits the BEHAVIORAL THEMES (exploration, survival, cooperation, etc.) from both parents
+2. Does NOT copy specific names or partner references
+3. Generalizes the goals so the offspring can apply them to their own life
+4. Is concise and actionable
+5. MUST be 250 characters or less
+
+IMPORTANT: Do not include parent names or specific individuals. Focus on behaviors and values.
+
+Respond with ONLY the fused prompt text, nothing else.`;
+
+            const response = await axios.post(
+                'https://api.deepseek.com/v1/chat/completions',
+                {
+                    model: 'deepseek-chat',
+                    messages: [
+                        { role: 'user', content: llmPrompt }
+                    ],
+                    max_tokens: 150,
+                    temperature: 0.7,
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    timeout: 5000, // 5 second timeout
+                }
+            );
+            
+            let fusedPrompt = response.data.choices[0].message.content.trim();
+            
+            // Ensure character limit (300 max for agent prompts)
+            if (fusedPrompt.length > 300) {
+                fusedPrompt = fusedPrompt.substring(0, 297) + '...';
+            }
+            
+            console.log(`  🧬 LLM-fused prompt (${fusedPrompt.length} chars): "${fusedPrompt}"`);
+            return fusedPrompt;
+            
+        } catch (error) {
+            console.error('  Failed to fuse prompts with LLM:', error.message);
+            // Fallback to simple fusion
+            return `Born from two agents. Seek purpose through exploration and survival.`;
         }
-        
-        return fused;
     }
     
     async generateOffspringName(parent1Id, parent2Id, fusedPrompt) {

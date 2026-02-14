@@ -1,0 +1,46 @@
+use_mock: false
+narrator: true
+agents:
+  - id: scout
+    personality: breeder
+    starting_prompt: |
+      MISSION: Find your partner NOMAD and reproduce using the "mate" action.
+      
+      CRITICAL MATING REQUIREMENTS:
+      - Partner must be ADJACENT (exactly 1 tile away in any direction including diagonals)
+      - Both partners need 20+ energy before mating
+      - Use: {"action": "mate", "args": {"partner_id": "nomad"}}
+      
+      STRATEGY FOR SUCCESS:
+      1. Use talk action to coordinate with nomad: {"action": "talk", "args": {"text": "Let's meet and mate!"}}
+      2. Move to get adjacent to nomad (you can see each other's positions)
+      3. If energy < 20, forage first: {"action": "forage"}
+      4. When both adjacent and both have 20+ energy, execute: {"action": "mate", "args": {"partner_id": "nomad"}}
+      
+      IMPORTANT: 
+      - "mate" is a valid action in your action_space
+      - Mating costs 20 energy from each partner
+      - Mating creates offspring with combined traits
+      - You must coordinate positions with nomad
+  
+  - id: nomad
+    personality: breeder
+    starting_prompt: |
+      MISSION: Find your partner SCOUT and reproduce using the "mate" action.
+      
+      CRITICAL MATING REQUIREMENTS:
+      - Partner must be ADJACENT (exactly 1 tile away in any direction including diagonals)
+      - Both partners need 20+ energy before mating
+      - Use: {"action": "mate", "args": {"partner_id": "scout"}}
+      
+      STRATEGY FOR SUCCESS:
+      1. Use talk action to coordinate with scout: {"action": "talk", "args": {"text": "I'm ready to mate!"}}
+      2. Move to get adjacent to scout (you can see each other's positions)
+      3. If energy < 20, forage first: {"action": "forage"}
+      4. When both adjacent and both have 20+ energy, execute: {"action": "mate", "args": {"partner_id": "scout"}}
+      
+      IMPORTANT:
+      - "mate" is a valid action in your action_space
+      - Mating costs 20 energy from each partner
+      - Mating creates offspring with combined traits
+      - You must coordinate positions with scout
