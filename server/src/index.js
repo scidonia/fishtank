@@ -13,7 +13,16 @@ app.use((req, res, next) => {
 });
 
 // Initialize world server with large map
-const world = new WorldServer({ seed: 42, mapFile: 'shared/map.txt' });
+const MAX_TURNS = process.env.MAX_TURNS ? parseInt(process.env.MAX_TURNS) : null;
+const world = new WorldServer({ 
+    seed: 42, 
+    mapFile: 'shared/map.txt',
+    maxTurns: MAX_TURNS
+});
+
+if (MAX_TURNS) {
+    console.log(`⏰ Run will end after ${MAX_TURNS} turns`);
+}
 
 // SSE endpoint for public stream
 app.get('/stream/public', (req, res) => {
@@ -122,6 +131,23 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', turn: world.turnId });
 });
 
+// Narrator submission endpoint
+app.post('/narrate', (req, res) => {
+    const { turn, text } = req.body;
+    
+    if (turn === undefined || !text) {
+        return res.status(400).json({ error: 'Missing turn or text' });
+    }
+    
+    // Broadcast narrative to all viewers with dedicated event type
+    world.broadcastNarrative({
+        turn,
+        text
+    });
+    
+    res.json({ ok: true });
+});
+
 // Archaeology API - Get all past runs
 app.get('/api/runs', (req, res) => {
     try {
@@ -158,18 +184,19 @@ app.listen(PORT, () => {
 });
 
 // Graceful shutdown handler
-process.on('SIGINT', () => {
+async function shutdown() {
     console.log('\n\nShutting down gracefully...');
     world.running = false; // Stop turn loop
-    world.logger.endRun();
-    console.log('World run saved to database.');
+    
+    try {
+        await world.logger.endRun();
+        console.log('World run saved to database.');
+    } catch (error) {
+        console.error('Error saving world run:', error);
+    }
+    
     process.exit(0);
-});
+}
 
-process.on('SIGTERM', () => {
-    console.log('\n\nShutting down gracefully...');
-    world.running = false; // Stop turn loop
-    world.logger.endRun();
-    console.log('World run saved to database.');
-    process.exit(0);
-});
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

@@ -9,11 +9,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export class WorldServer {
-    constructor({ seed = 42, mapFile = null }) {
+    constructor({ seed = 42, mapFile = null, maxTurns = null }) {
         this.seed = seed;
         this.rng = this.createSeededRNG(seed);
         
         this.turnId = 0;
+        this.maxTurns = maxTurns; // Optional turn limit (null = unlimited)
         this.running = false;
         this.turnInterval = 1000; // ms per turn
         
@@ -356,7 +357,23 @@ export class WorldServer {
     async executeTurn() {
         this.turnId++;
         this.logger.updateTurnCount(this.turnId);
-        console.log(`[Turn ${this.turnId}] Starting`);
+        
+        // Check if max turns reached
+        if (this.maxTurns !== null && this.turnId > this.maxTurns) {
+            console.log(`\n⏰ MAX TURNS REACHED (${this.maxTurns}) - Ending run...`);
+            this.running = false;
+            // End run asynchronously with LLM summary
+            this.logger.endRun().then(() => {
+                console.log('✓ World run ended due to turn limit');
+                process.exit(0);
+            }).catch(err => {
+                console.error('Error ending run:', err);
+                process.exit(1);
+            });
+            return;
+        }
+        
+        console.log(`[Turn ${this.turnId}${this.maxTurns ? `/${this.maxTurns}` : ''}] Starting`);
         
         // Get agents in initiative order (deterministic by ID)
         const agents = this.entities
@@ -439,6 +456,21 @@ export class WorldServer {
         // Apply world effects
         this.applyEnergyDecay();
         this.applyPlantGrowth();
+        
+        // Check if all agents are dead (end run condition)
+        const aliveAgents = this.entities.filter(e => e.type === 'agent' && e.hp > 0);
+        if (aliveAgents.length === 0 && this.turnId > 1) {
+            console.log('\n⚰️  ALL AGENTS DIED - Ending run...');
+            this.running = false;
+            // End run asynchronously (don't block turn loop)
+            this.logger.endRun().then(() => {
+                console.log('✓ World run ended due to extinction');
+                process.exit(0);
+            }).catch(err => {
+                console.error('Error ending run:', err);
+                process.exit(1);
+            });
+        }
         
         // Broadcast delta
         this.broadcastDelta();
@@ -1727,8 +1759,17 @@ Respond with ONLY the name, nothing else.`;
     }
     
     broadcastPublic(event) {
+        // Add turn ID to all public events so clients can track turns
+        const eventWithTurn = { ...event, turn: this.turnId };
         this.publicClients.forEach(callback => {
-            callback({ type: 'public', data: event });
+            callback({ type: 'public', data: eventWithTurn });
+        });
+    }
+    
+    broadcastNarrative(narrativeData) {
+        // Broadcast narrative with its own SSE event type for viewer
+        this.publicClients.forEach(callback => {
+            callback({ type: 'narrative', data: narrativeData });
         });
     }
     

@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { mkdirSync } from 'fs';
+import { WorldSummarizer } from './worldSummarizer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -10,6 +11,7 @@ const __dirname = dirname(__filename);
 export class WorldLogger {
     constructor(runId = null) {
         this.runId = runId || this.generateRunId();
+        this.summarizer = new WorldSummarizer();
         
         // Ensure data directory exists
         const dataDir = join(__dirname, '..', '..', 'data');
@@ -211,7 +213,16 @@ export class WorldLogger {
         stmt.run(this.runId);
     }
     
-    endRun(summary = null) {
+    async endRun(summary = null) {
+        // Generate summary if not provided
+        if (!summary) {
+            const runStats = this.getRunStats();
+            const events = this.getRunEvents();
+            const agents = this.getAgentLifespans();
+            
+            summary = await this.summarizer.generateSummary(runStats, events, agents);
+        }
+        
         const stmt = this.db.prepare(`
             UPDATE runs SET end_time = ?, world_summary = ? WHERE run_id = ?
         `);

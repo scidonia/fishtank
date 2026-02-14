@@ -205,6 +205,11 @@ class WorldViewer {
             this.handlePublicEvent(data);
         });
         
+        this.eventSource.addEventListener('narrative', (e) => {
+            const data = JSON.parse(e.data);
+            this.handleNarrative(data);
+        });
+        
         this.eventSource.onopen = () => {
             console.log('SSE connection opened');
             this.updateConnectionStatus(true);
@@ -309,6 +314,44 @@ class WorldViewer {
     
     handlePublicEvent(data) {
         this.addEventToLog(data);
+    }
+    
+    handleNarrative(data) {
+        console.log('📖 Narrative received:', data);
+        const narratorContent = document.getElementById('narrator-content');
+        console.log('📖 Narrator content element:', narratorContent);
+        const placeholder = narratorContent.querySelector('.narrator-placeholder');
+        
+        // Remove placeholder if it exists
+        if (placeholder) {
+            console.log('📖 Removing placeholder');
+            placeholder.remove();
+        }
+        
+        // Create narrative entry
+        const entry = document.createElement('div');
+        entry.className = 'narrator-entry';
+        entry.innerHTML = `
+            <div class="narrator-turn">Turn ${data.turn}</div>
+            <div class="narrator-text">${this.escapeHtml(data.text)}</div>
+        `;
+        
+        console.log('📖 Adding narrative entry:', entry.innerHTML);
+        
+        // Add to top (most recent first)
+        narratorContent.insertBefore(entry, narratorContent.firstChild);
+        
+        // Keep only last 20 narrations
+        const entries = narratorContent.querySelectorAll('.narrator-entry');
+        if (entries.length > 20) {
+            entries[entries.length - 1].remove();
+        }
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     startRenderLoop() {

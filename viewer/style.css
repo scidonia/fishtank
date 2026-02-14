@@ -134,7 +134,7 @@ main {
     grid-column: 3;
 }
 
-.stats-panel, .surveillance-panel, .agent-info-panel, .agent-log-panel, .event-log {
+.stats-panel, .surveillance-panel, .agent-info-panel, .agent-log-panel, .event-log, .narrator-panel {
     background: #2a2a2a;
     border-radius: 8px;
     padding: 15px;
@@ -145,7 +145,8 @@ main {
 .surveillance-panel.collapsed, 
 .agent-info-panel.collapsed, 
 .agent-log-panel.collapsed, 
-.event-log.collapsed {
+.event-log.collapsed,
+.narrator-panel.collapsed {
     padding: 8px 15px;
 }
 
@@ -226,6 +227,7 @@ main {
     font-size: 11px;
     line-height: 1.5;
     min-height: 0;
+    max-height: 500px; /* Ensure scrolling works */
 }
 
 #agent-list {
@@ -605,4 +607,333 @@ h2 {
     font-size: 14px;
     color: #e0e0e0;
     padding-top: 4px;
+}
+/* ============================================
+   ARCHAEOLOGY TAB
+   ============================================ */
+
+.archaeology-container {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 20px;
+    height: calc(100vh - 180px);
+}
+
+.archaeology-sidebar {
+    background: #2a2a2a;
+    border-radius: 8px;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.archaeology-sidebar h2 {
+    font-size: 18px;
+    margin-bottom: 15px;
+    color: #4fc3f7;
+}
+
+.archaeology-runs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.archaeology-run-card {
+    background: #1a1a1a;
+    border: 2px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.archaeology-run-card:hover {
+    border-color: #4fc3f7;
+    background: #252525;
+}
+
+.archaeology-run-card.selected {
+    border-color: #4fc3f7;
+    background: #2a3a4a;
+}
+
+.run-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.run-status {
+    font-size: 12px;
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.status-ongoing {
+    background: #388e3c;
+    color: white;
+}
+
+.status-ended {
+    background: #5a5a5a;
+    color: #d0d0d0;
+}
+
+.run-id {
+    font-size: 11px;
+    color: #888;
+    font-family: monospace;
+}
+
+.run-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.stat {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+}
+
+.stat-label {
+    color: #888;
+}
+
+.stat-value {
+    color: #4fc3f7;
+    font-weight: bold;
+}
+
+.run-time {
+    font-size: 12px;
+    color: #888;
+    border-top: 1px solid #3a3a3a;
+    padding-top: 8px;
+    margin-top: 8px;
+}
+
+.run-time div {
+    margin-bottom: 4px;
+}
+
+.run-summary {
+    margin-top: 10px;
+    padding: 10px;
+    background: #2a2a2a;
+    border-left: 3px solid #4fc3f7;
+    font-size: 13px;
+    font-style: italic;
+    color: #d0d0d0;
+}
+
+.archaeology-main {
+    background: #2a2a2a;
+    border-radius: 8px;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.archaeology-welcome {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    color: #888;
+    text-align: center;
+}
+
+.archaeology-welcome h2 {
+    font-size: 32px;
+    margin-bottom: 20px;
+    color: #4fc3f7;
+}
+
+.archaeology-welcome p {
+    font-size: 16px;
+    margin-bottom: 10px;
+    max-width: 500px;
+}
+
+.run-details-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.run-details-section h3 {
+    font-size: 18px;
+    margin-bottom: 15px;
+    color: #4fc3f7;
+    border-bottom: 2px solid #3a3a3a;
+    padding-bottom: 8px;
+}
+
+.run-events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.turn-group {
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.turn-group h4 {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+}
+
+.event-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    background: #252525;
+}
+
+.event-attack {
+    border-left: 3px solid #f44336;
+}
+
+.event-death {
+    border-left: 3px solid #9c27b0;
+}
+
+.event-birth {
+    border-left: 3px solid #4caf50;
+}
+
+.event-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.event-text {
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.event-text strong {
+    color: #4fc3f7;
+}
+
+.run-lifespans-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.lifespan-item {
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 15px;
+    border-left: 3px solid #4fc3f7;
+}
+
+.lifespan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.lifespan-header strong {
+    font-size: 16px;
+    color: #4fc3f7;
+}
+
+.lifespan-duration {
+    font-size: 13px;
+    color: #888;
+    background: #252525;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.lifespan-details {
+    font-size: 13px;
+    color: #d0d0d0;
+}
+
+.lifespan-details div {
+    margin-bottom: 5px;
+}
+
+.no-runs, .no-events, .no-agents, .error, .loading {
+    padding: 20px;
+    text-align: center;
+    color: #888;
+    font-style: italic;
+}
+
+.error {
+    color: #f44336;
+}
+
+/* ============================================
+   NARRATOR PANEL
+   ============================================ */
+
+.narrator-panel {
+    flex: 0 0 auto;
+}
+
+.narrator-content {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 10px;
+    background: #1a1a1a;
+    border-radius: 4px;
+}
+
+.narrator-placeholder {
+    color: #666;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+.narrator-entry {
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #2a2a2a;
+    border-left: 4px solid #4fc3f7;
+    border-radius: 4px;
+    min-height: 70px;
+}
+
+.narrator-turn {
+    font-size: 12px;
+    color: #4fc3f7;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.narrator-text {
+    font-size: 15px;
+    line-height: 1.7;
+    color: #ffffff !important;
+    font-weight: 400;
+    min-height: 40px;
+    display: block;
+}
+
+.narrator-loading {
+    color: #888;
+    font-style: italic;
+    padding: 10px;
+    text-align: center;
 }

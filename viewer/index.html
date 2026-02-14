@@ -13,6 +13,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('world')">World</button>
                 <button class="tab-btn" onclick="switchTab('actions')">Actions</button>
+                <button class="tab-btn" onclick="switchTab('archaeology')">Archaeology</button>
             </div>
             <div class="connection-status">
                 <span id="status">Disconnected</span>
@@ -62,22 +63,33 @@
             </div>
             
             <aside class="sidebar sidebar-right">
-                <section class="agent-log-panel collapsible">
+                <section class="narrator-panel collapsible">
                     <h2 class="collapsible-header" onclick="toggleSection(this)">
-                        <span class="collapse-icon">▼</span> Agent Log
-                        <button id="view-prompt-btn" style="display: none; margin-left: auto;">View Prompt</button>
+                        <span class="collapse-icon">▼</span> Narrator
                     </h2>
                     <div class="collapsible-content">
+                        <div id="narrator-content" class="narrator-content">
+                            <div class="narrator-placeholder">Narrator will summarize events as they unfold...</div>
+                        </div>
+                    </div>
+                </section>
+                
+                <section class="agent-log-panel collapsible collapsed">
+                    <h2 class="collapsible-header" onclick="toggleSection(this)">
+                        <span class="collapse-icon">▶</span> Agent Log
+                        <button id="view-prompt-btn" style="display: none; margin-left: auto;">View Prompt</button>
+                    </h2>
+                    <div class="collapsible-content" style="display: none;">
                         <div class="agent-log-info">Click an agent to view their thinking</div>
                         <div id="agent-log-list"></div>
                     </div>
                 </section>
                 
-                <section class="event-log collapsible">
+                <section class="event-log collapsible collapsed">
                     <h2 class="collapsible-header" onclick="toggleSection(this)">
-                        <span class="collapse-icon">▼</span> Event Log
+                        <span class="collapse-icon">▶</span> Event Log
                     </h2>
-                    <div id="event-list" class="collapsible-content"></div>
+                    <div id="event-list" class="collapsible-content" style="display: none;"></div>
                 </section>
             </aside>
             
@@ -101,6 +113,37 @@
                 </div>
             </div>
         </main>
+        
+        <div id="archaeology-tab" class="tab-content" style="display: none;">
+            <div class="archaeology-container">
+                <aside class="archaeology-sidebar">
+                    <h2>Past World Runs</h2>
+                    <div id="archaeology-runs-list" class="archaeology-runs-list">
+                        <div class="loading">Loading runs...</div>
+                    </div>
+                </aside>
+                
+                <main class="archaeology-main">
+                    <div id="run-details-panel" class="run-details-panel" style="display: none;">
+                        <section class="run-details-section">
+                            <h3>Events Timeline</h3>
+                            <div id="run-events-list" class="run-events-list"></div>
+                        </section>
+                        
+                        <section class="run-details-section">
+                            <h3>Agent Lifespans</h3>
+                            <div id="run-lifespans-list" class="run-lifespans-list"></div>
+                        </section>
+                    </div>
+                    
+                    <div class="archaeology-welcome" id="archaeology-welcome">
+                        <h2>🏛️ World Archaeology</h2>
+                        <p>Explore the history of past Fish Tank worlds.</p>
+                        <p>Select a run from the sidebar to view detailed events, agent lifespans, and combat history.</p>
+                    </div>
+                </main>
+            </div>
+        </div>
         
         <div id="actions-tab" class="tab-content" style="display: none;">
             <div class="actions-reference">
@@ -216,6 +259,14 @@
             } else if (tabName === 'actions') {
                 document.getElementById('actions-tab').style.display = 'block';
                 document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            } else if (tabName === 'archaeology') {
+                document.getElementById('archaeology-tab').style.display = 'block';
+                document.querySelectorAll('.tab-btn')[2].classList.add('active');
+                // Initialize archaeology viewer on first view
+                if (typeof window.archaeologyInitialized === 'undefined') {
+                    window.archaeologyInitialized = true;
+                    initArchaeology();
+                }
             }
         }
         
@@ -236,5 +287,6 @@
         }
     </script>
     <script src="viewer.js"></script>
+    <script src="archaeology.js"></script>
 </body>
 </html>
