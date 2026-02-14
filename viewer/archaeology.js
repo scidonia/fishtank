@@ -1,6 +1,5 @@
 // Archaeology - View past world runs
 
-const SERVER_URL = 'http://localhost:3000';
 let selectedRunId = null;
 
 // Format timestamp to readable date
