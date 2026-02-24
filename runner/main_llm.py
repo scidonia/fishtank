@@ -13,7 +13,6 @@ from rich.panel import Panel
 from runner.agent import (
     AgentConfig,
     AgentMemory,
-    AgentPersonality,
     get_base_prompt,
     get_observation_prompt,
 )
@@ -58,9 +57,7 @@ class LLMAgentRunner:
         """Main agent loop."""
         console.print(
             Panel.fit(
-                f"[bold green]{self.config.agent_id}[/bold green]\n"
-                f"Personality: {self.config.personality.value}\n"
-                f"Goal: {self.config.primary_goal}",
+                f"[bold green]{self.config.agent_id}[/bold green]",
                 title="Agent Starting",
             )
         )
@@ -150,34 +147,21 @@ class LLMAgentRunner:
 
         turn_id = obs["turn_id"]
 
-        # Set initial personality prompt on first observation if empty
-        if self.turn_count == 1 and not obs.get("prompt"):
-            from runner.agent import get_initial_personality_prompt
+        # Set starting prompt on first turn if provided and agent has no prompt yet
+        if self.turn_count == 1 and not obs.get("prompt") and self.starting_prompt:
+            await self.submit_action(
+                client,
+                turn_id,
+                {
+                    "action": "edit_prompt",
+                    "args": {"text": self.starting_prompt},
+                    "reasoning": "Setting starting prompt",
+                },
+            )
+            return
 
-            # Use starting_prompt if provided, otherwise use personality default
-            if self.starting_prompt:
-                initial_prompt = self.starting_prompt
-                reasoning = "Setting custom starting prompt"
-            else:
-                initial_prompt = get_initial_personality_prompt(self.config)
-                reasoning = "Setting initial traits"
-
-            # Only set prompt if there's actually content (skip for empty/neutral)
-            if initial_prompt:
-                await self.submit_action(
-                    client,
-                    turn_id,
-                    {
-                        "action": "edit_prompt",
-                        "args": {"text": initial_prompt},
-                        "reasoning": reasoning,
-                    },
-                )
-                return
         health = obs["health"]
-        energy = obs.get(
-            "energy", obs.get("hunger", 100)
-        )  # Support both old and new format
+        energy = obs.get("energy", obs.get("hunger", 100))
 
         # Update memory
         self.update_memory(obs)
@@ -202,7 +186,6 @@ class LLMAgentRunner:
 
         # Debug: Always show ASCII map on first turn to verify it's working
         if turn_id <= 2 and "VISIBLE AREA" in obs_prompt:
-            # Extract just the ASCII map section
             start_idx = obs_prompt.find("VISIBLE AREA")
             end_idx = obs_prompt.find("\n\n", start_idx)
             if start_idx != -1 and end_idx != -1:
@@ -272,44 +255,16 @@ class LLMAgentRunner:
         last_action_result = obs.get("last_action_result")
 
         if last_action_result and self.last_submitted_action:
-            # Combine the submitted action details with the result
             action_type = self.last_submitted_action["action"]
             action_args = self.last_submitted_action["args"]
             success = last_action_result.get("success", False)
             message = last_action_result.get("message", "")
             reason = last_action_result.get("reason", "")
 
-            # Format result string
             if success:
                 result_str = f"✓ {message}"
             else:
                 result_str = f"✗ {message} ({reason})"
-
-            self.memory.add_action(
-                action=action_type,
-                args=action_args,
-                result=result_str,
-                turn=self.last_submitted_action["turn"],
-            )
-
-        if last_action_result and self.last_submitted_action:
-            # Combine the submitted action details with the result
-            action_type = self.last_submitted_action["action"]
-            action_args = self.last_submitted_action["args"]
-            success = last_action_result.get("success", False)
-            message = last_action_result.get("message", "")
-            reason = last_action_result.get("reason", "")
-
-            # Format result string
-            if success:
-                result_str = f"✓ {message}"
-            else:
-                result_str = f"✗ {message} ({reason})"
-
-            print(
-                f"DEBUG: Adding action to memory: {action_type} at turn {self.last_submitted_action['turn']}",
-                file=sys.stderr,
-            )
 
             self.memory.add_action(
                 action=action_type,
@@ -346,7 +301,6 @@ class LLMAgentRunner:
                 error = result.get("error", "Unknown error")
                 console.print(f"[red]  ✗ Action rejected: {error}[/red]")
 
-                # Emit failure telemetry
                 await self.emit_telemetry(
                     client,
                     {
@@ -361,7 +315,6 @@ class LLMAgentRunner:
                     f"[green]  ✓ {decision['action']} {decision.get('args', {})}[/green]"
                 )
 
-                # Emit success telemetry
                 await self.emit_telemetry(
                     client, {"phase": "result", "turn_id": turn_id, "ok": True}
                 )
@@ -383,19 +336,15 @@ class LLMAgentRunner:
         try:
             await client.post(url, json=payload, timeout=1.0)
         except Exception as e:
-            # Don't let telemetry errors crash the agent
             error_console.print(f"[dim]Telemetry error: {e}[/dim]")
 
     def display_observation(self, obs: Dict[str, Any]) -> None:
         """Display the current observation."""
         turn_id = obs["turn_id"]
         health = obs["health"]
-        energy = obs.get(
-            "energy", obs.get("hunger", 100)
-        )  # Support both old and new format
+        energy = obs.get("energy", obs.get("hunger", 100))
         entities = obs["visible_entities"]
 
-        # Health/energy indicators
         health_bar = "█" * (health // 10) + "░" * (10 - health // 10)
         energy_bar = "█" * (energy // 10) + "░" * (10 - energy // 10)
 
@@ -415,7 +364,6 @@ class LLMAgentRunner:
 @app.command()
 def main(
     agent_id: str = "scout",
-    personality: str = "explorer",
     server_url: str = "http://localhost:3000",
     use_mock: bool = False,
     debug_prompts: bool = False,
@@ -427,30 +375,8 @@ def main(
 
     Set DEEPSEEK_API_KEY environment variable to use real LLM.
     Otherwise, will use mock LLM with heuristic decisions.
-
-    Args:
-        agent_id: Agent ID to use
-        personality: Agent personality (explorer, survivor, aggressive, cooperative, cautious, breeder)
-        server_url: World server URL
-        use_mock: Use mock LLM instead of DeepSeek
-        debug_prompts: Print full prompts for debugging
-        starting_prompt: Initial persistent prompt to set on turn 1 (overrides personality default)
     """
-    # Debug all parameters
-    console.print(
-        f"[dim]DEBUG: agent_id={repr(agent_id)}, personality type={type(personality)}, value={repr(personality)}[/dim]"
-    )
-
-    try:
-        personality_enum = AgentPersonality(personality.lower())
-    except (ValueError, AttributeError) as e:
-        error_console.print(
-            f"Invalid personality: {personality} (error: {e})\n"
-            f"Valid options: explorer, survivor, aggressive, cooperative, cautious, breeder"
-        )
-        sys.exit(1)
-
-    config = AgentConfig.from_personality(agent_id, personality_enum)
+    config = AgentConfig(agent_id=agent_id)
     runner = LLMAgentRunner(
         config, server_url, use_mock, debug_prompts, starting_prompt, avatar
     )

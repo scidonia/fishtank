@@ -1,135 +1,15 @@
-"""Agent personality and behavior system."""
+"""Agent configuration and behaviour system."""
 
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
-from enum import Enum
-
-
-class AgentPersonality(Enum):
-    """Predefined agent personalities."""
-
-    EXPLORER = "explorer"
-    SURVIVOR = "survivor"
-    AGGRESSIVE = "aggressive"
-    COOPERATIVE = "cooperative"
-    CAUTIOUS = "cautious"
-    BREEDER = "breeder"
-    NEUTRAL = "neutral"  # No personality guidance, balanced traits
 
 
 @dataclass
 class AgentConfig:
-    """Configuration for an agent's personality and behavior."""
+    """Configuration for an agent."""
 
     agent_id: str
-    personality: AgentPersonality
     species: str = "human"
-
-    # Personality traits (0.0 to 1.0)
-    aggression: float = 0.5
-    curiosity: float = 0.5
-    sociability: float = 0.5
-    caution: float = 0.5
-
-    # Goals and motivations
-    primary_goal: str = "survive"
-    secondary_goals: List[str] = field(default_factory=list)
-
-    # Relationships
-    allies: List[str] = field(default_factory=list)
-    enemies: List[str] = field(default_factory=list)
-
-    @classmethod
-    def from_personality(
-        cls, agent_id: str, personality: AgentPersonality
-    ) -> "AgentConfig":
-        """Create config from predefined personality."""
-        configs = {
-            AgentPersonality.EXPLORER: cls(
-                agent_id=agent_id,
-                personality=personality,
-                aggression=0.2,
-                curiosity=0.9,
-                sociability=0.6,
-                caution=0.4,
-                primary_goal="explore the entire map",
-                secondary_goals=["find interesting locations", "meet other agents"],
-            ),
-            AgentPersonality.SURVIVOR: cls(
-                agent_id=agent_id,
-                personality=personality,
-                aggression=0.3,
-                curiosity=0.4,
-                sociability=0.5,
-                caution=0.8,
-                primary_goal="thrive and prosper in this world",
-                secondary_goals=[
-                    "gather resources",
-                    "establish territory",
-                    "build safe zones",
-                ],
-            ),
-            AgentPersonality.AGGRESSIVE: cls(
-                agent_id=agent_id,
-                personality=personality,
-                aggression=0.95,
-                curiosity=0.5,
-                sociability=0.2,
-                caution=0.1,
-                primary_goal="dominate the world through force",
-                secondary_goals=[
-                    "attack rivals",
-                    "eliminate threats",
-                    "control all resources",
-                ],
-            ),
-            AgentPersonality.COOPERATIVE: cls(
-                agent_id=agent_id,
-                personality=personality,
-                aggression=0.1,
-                curiosity=0.6,
-                sociability=0.9,
-                caution=0.5,
-                primary_goal="help others and build community",
-                secondary_goals=["make friends", "share resources", "protect allies"],
-            ),
-            AgentPersonality.CAUTIOUS: cls(
-                agent_id=agent_id,
-                personality=personality,
-                aggression=0.2,
-                curiosity=0.3,
-                sociability=0.4,
-                caution=0.9,
-                primary_goal="avoid all risks",
-                secondary_goals=["find safe hiding spots", "scout carefully"],
-            ),
-            AgentPersonality.BREEDER: cls(
-                agent_id=agent_id,
-                personality=personality,
-                aggression=0.1,
-                curiosity=0.7,
-                sociability=0.9,
-                caution=0.3,
-                primary_goal="find compatible partners and create offspring using the mate action",
-                secondary_goals=[
-                    "maintain high energy for reproduction",
-                    "coordinate with partners to be adjacent",
-                    "use mate action with partner_id when ready",
-                    "build thriving population",
-                ],
-            ),
-            AgentPersonality.NEUTRAL: cls(
-                agent_id=agent_id,
-                personality=personality,
-                aggression=0.5,
-                curiosity=0.5,
-                sociability=0.5,
-                caution=0.5,
-                primary_goal="",  # No goal at all
-                secondary_goals=[],
-            ),
-        }
-        return configs[personality]
 
 
 @dataclass
@@ -209,13 +89,8 @@ class AgentMemory:
         return "\n".join(parts) if parts else "No significant memories yet"
 
 
-def get_initial_personality_prompt(config: AgentConfig) -> str:
-    """Return empty string - agents start with no prompt and define themselves via edit_prompt."""
-    return ""
-
-
 def get_base_prompt(config: AgentConfig) -> str:
-    """Get the immutable base prompt (game mechanics only - no behavioral guidance)."""
+    """Get the immutable base prompt (game mechanics only - no behavioural guidance)."""
     return f"""You are {config.agent_id}, a {config.species} in a world with other agents and creatures.
 
 GAME MECHANICS:
@@ -337,7 +212,6 @@ STATUS:
     if last_action:
         if last_action.get("success"):
             prompt += f"LAST ACTION: ✓ {last_action.get('message', 'Success')}\n"
-            # Show explicit truncation warning if text was truncated
             if last_action.get("truncated"):
                 prompt += f"  ⚠️ WARNING: Text was TRUNCATED from {last_action.get('original_length')} to {last_action.get('max_length')} characters\n"
         else:
@@ -354,7 +228,6 @@ STATUS:
             args = action_record["args"]
             result = action_record["result"]
 
-            # Format args compactly
             args_str = ""
             if args:
                 if "dir" in args:
@@ -374,13 +247,10 @@ STATUS:
 
     # Create ASCII map of visible area
     if visible_tiles:
-        # Build a grid of what the agent can see
-        # FOV is 10 tile radius, so 21x21 grid (-10 to +10)
         fov_size = 21
         fov_center = 10
         grid = [[" " for _ in range(fov_size)] for _ in range(fov_size)]
 
-        # Fill in tiles
         for tile in visible_tiles:
             rel_x, rel_y = tile["relative"]
             grid_x = fov_center + rel_x
@@ -388,10 +258,8 @@ STATUS:
             if 0 <= grid_x < fov_size and 0 <= grid_y < fov_size:
                 grid[grid_y][grid_x] = tile["tile"]
 
-        # Mark agent's position
         grid[fov_center][fov_center] = "@"
 
-        # Mark visible entities on the map
         agent_pos = obs.get("position", [0, 0])
         for entity in visible_entities:
             ex, ey = entity["pos"]
@@ -410,10 +278,9 @@ STATUS:
                 elif entity_type == "bones":
                     grid[grid_y][grid_x] = "b"
 
-        # Convert grid to string (show central 11x11 area for clarity)
         prompt += f"VISIBLE AREA (your FOV, 11x11 central view):\n"
         prompt += "Legend: @ = You, # = Wall, . = Floor, A = Agent, p = Plant, m = Meat, b = Bones\n"
-        start = 5  # Show from -5 to +5 (11x11)
+        start = 5
         end = 16
         for y in range(start, end):
             row = "".join(grid[y][start:end])
@@ -427,11 +294,10 @@ STATUS:
             entity_id = entity["id"]
             entity_pos = entity["pos"]
 
-            # Calculate distance from agent's position
             agent_pos = obs.get("position", [0, 0])
             dx = abs(entity_pos[0] - agent_pos[0])
             dy = abs(entity_pos[1] - agent_pos[1])
-            distance = max(dx, dy)  # Chebyshev distance (grid distance)
+            distance = max(dx, dy)
 
             if entity_type == "plant":
                 forageable = (
@@ -450,7 +316,6 @@ STATUS:
             elif entity_type == "bones":
                 prompt += f"  - {entity_type} ({entity_id}) at position {entity_pos} [remains, no nutrition]\n"
             else:
-                # Agent entity
                 entity_hp = entity.get("hp", "?")
                 attackable = (
                     "✓ CAN ATTACK!" if distance <= 1 else f"distance: {distance} tiles"
@@ -464,14 +329,12 @@ STATUS:
         for event in recent_events:
             prompt += f"  - {event}\n"
 
-    # Show heard messages from nearby agents
     heard_messages = obs.get("heard_messages", [])
     if heard_messages:
         prompt += f"\nHEARD MESSAGES (from nearby agents):\n"
         for msg in heard_messages:
             prompt += f'  - Turn {msg["turn"]}, {msg["speaker"]}: "{msg["message"]}"\n'
 
-    # Show agent's persistent prompt (always displayed)
     agent_prompt = obs.get("prompt", "")
     if agent_prompt:
         prompt += f"\nYOUR PERSISTENT PROMPT:\n{agent_prompt}\n"

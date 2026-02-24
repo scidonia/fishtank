@@ -18,11 +18,8 @@ uv run agent --agent-id scout
 # Set your DeepSeek API key
 export DEEPSEEK_API_KEY="your-api-key"
 
-# Run with specific personality
-uv run agent-llm --agent-id explorer1 --personality explorer
 
 # Or use mock LLM for testing
-uv run agent-llm --agent-id test1 --personality survivor --use-mock
 ```
 
 ## Agent Personalities
@@ -72,7 +69,6 @@ uv run agent-llm --help
 
 Options:
   --agent-id TEXT        Agent ID (default: scout)
-  --personality TEXT     Personality type (default: explorer)
                          Options: explorer, survivor, aggressive, cooperative, cautious
   --server-url TEXT      World server URL (default: http://localhost:3000)
   --use-mock            Use mock LLM instead of DeepSeek API
@@ -85,22 +81,17 @@ Options:
 ```bash
 # Terminal 1: Explorer
 export DEEPSEEK_API_KEY="your-key"
-uv run agent-llm --agent-id scout --personality explorer
 
 # Terminal 2: Survivor  
 export DEEPSEEK_API_KEY="your-key"
-uv run agent-llm --agent-id nomad --personality survivor
 
 # Terminal 3: Cooperative
 export DEEPSEEK_API_KEY="your-key"
-uv run agent-llm --agent-id helper --personality cooperative
 ```
 
 ### Test with Mock LLM (No API Key Needed)
 
 ```bash
-uv run agent-llm --agent-id test1 --personality explorer --use-mock
-uv run agent-llm --agent-id test2 --personality aggressive --use-mock
 ```
 
 ## Agent Decision Making
@@ -108,7 +99,6 @@ uv run agent-llm --agent-id test2 --personality aggressive --use-mock
 ### With LLM (DeepSeek v3)
 
 1. Agent receives observation (turn, health, hunger, visible entities)
-2. Observation is formatted into a prompt with personality and memory
 3. LLM generates decision as JSON
 4. Decision is validated and submitted to server
 
@@ -147,17 +137,14 @@ Simple rule-based decisions:
 
 ### Create Custom Personality
 
-Edit `runner/agent.py` and add to `AgentPersonality` enum and `from_personality` method:
 
 ```python
 class AgentPersonality(Enum):
     # ... existing ...
     SCIENTIST = "scientist"
 
-# In from_personality method:
 AgentPersonality.SCIENTIST: cls(
     agent_id=agent_id,
-    personality=personality,
     aggression=0.1,
     curiosity=1.0,
     sociability=0.7,

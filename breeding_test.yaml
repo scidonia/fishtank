@@ -2,7 +2,6 @@ use_mock: false
 narrator: true
 agents:
   - id: scout
-    personality: breeder
     starting_prompt: |
       MISSION: Find your partner NOMAD and reproduce using the "mate" action.
       
@@ -24,7 +23,6 @@ agents:
       - You must coordinate positions with nomad
   
   - id: nomad
-    personality: breeder
     starting_prompt: |
       MISSION: Find your partner SCOUT and reproduce using the "mate" action.
       

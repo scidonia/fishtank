@@ -521,7 +521,8 @@ class WorldViewer {
         }
         
         // Check for agent-specific sprite first (via avatar field, then fall back to id lookup)
-        const avatarKey = entity.avatar || entity.id;
+        // Strip .png extension if present (avatar field may be "scout.png" or "scout")
+        const avatarKey = (entity.avatar || entity.id).replace(/\.png$/i, '');
         if (entity.type === 'agent' && this.tilesLoaded && this.tiles.entities[avatarKey]) {
             this.ctx.drawImage(this.tiles.entities[avatarKey], px, py, this.tileSize, this.tileSize);
             this.renderHealthBar(entity, px, py);

@@ -7,13 +7,9 @@ narrator: true
 agents:
   # Just 4 cooperative agents - more likely to coordinate and experiment
   - id: adam
-    personality: cooperative
   
   - id: eve  
-    personality: cooperative
   
   - id: romeo
-    personality: cooperative
   
   - id: juliet
-    personality: cooperative

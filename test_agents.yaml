@@ -4,12 +4,9 @@ max_turns: 20   # End run after 20 turns
 
 agents:
   - id: hunter
-    personality: aggressive
     avatar: hunter.png
     
   - id: scout
-    personality: explorer
     
   - id: warden
-    personality: cautious
     avatar: warden.png

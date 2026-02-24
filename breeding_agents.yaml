@@ -7,19 +7,13 @@ use_mock: false  # Use real LLM
 agents:
   # All cooperative - they should talk, coordinate, and discover mating
   - id: romeo
-    personality: cooperative
   
   - id: juliet
-    personality: cooperative
   
   - id: adam
-    personality: cooperative
   
   - id: eve
-    personality: cooperative
   
   - id: breeder
-    personality: cooperative
   
   - id: nurturer
-    personality: cooperative
