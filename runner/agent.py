@@ -14,6 +14,7 @@ class AgentPersonality(Enum):
     COOPERATIVE = "cooperative"
     CAUTIOUS = "cautious"
     BREEDER = "breeder"
+    NEUTRAL = "neutral"  # No personality guidance, balanced traits
 
 
 @dataclass
@@ -71,12 +72,16 @@ class AgentConfig:
             AgentPersonality.AGGRESSIVE: cls(
                 agent_id=agent_id,
                 personality=personality,
-                aggression=0.9,
+                aggression=0.95,
                 curiosity=0.5,
-                sociability=0.3,
-                caution=0.2,
-                primary_goal="dominate the world",
-                secondary_goals=["eliminate threats", "control resources"],
+                sociability=0.2,
+                caution=0.1,
+                primary_goal="dominate the world through force",
+                secondary_goals=[
+                    "attack rivals",
+                    "eliminate threats",
+                    "control all resources",
+                ],
             ),
             AgentPersonality.COOPERATIVE: cls(
                 agent_id=agent_id,
@@ -112,6 +117,16 @@ class AgentConfig:
                     "use mate action with partner_id when ready",
                     "build thriving population",
                 ],
+            ),
+            AgentPersonality.NEUTRAL: cls(
+                agent_id=agent_id,
+                personality=personality,
+                aggression=0.5,
+                curiosity=0.5,
+                sociability=0.5,
+                caution=0.5,
+                primary_goal="",  # No goal at all
+                secondary_goals=[],
             ),
         }
         return configs[personality]
@@ -195,15 +210,8 @@ class AgentMemory:
 
 
 def get_initial_personality_prompt(config: AgentConfig) -> str:
-    """Generate minimal initial prompt for agent (just trait values - agent defines the rest)."""
-    return f"""TRAITS:
-- Aggression: {config.aggression:.1f}
-- Curiosity: {config.curiosity:.1f}
-- Sociability: {config.sociability:.1f}
-- Caution: {config.caution:.1f}
-
-(Use edit_prompt to define your personality, goals, and strategies)
-"""
+    """Return empty string - agents start with no prompt and define themselves via edit_prompt."""
+    return ""
 
 
 def get_base_prompt(config: AgentConfig) -> str:
@@ -250,8 +258,10 @@ TEXT LIMITS:
 
 ENTITY TYPES:
 - agent: Other humans (100 HP, 100 energy)
-- rabbit: Small animal (20 HP, drops 30 energy meat when killed)
-- deer: Large animal (80 HP, drops 100 energy meat when killed)
+- rabbit: Small animal (20 HP, drops meat when killed)
+- deer: Large animal (80 HP, drops meat when killed)
+- grey_wolf / dark_wolf: Predator (60 HP, deals 20 damage, actively hunts agents - DANGEROUS)
+- grizzly / black_bear: Predator (150 HP, deals 30 damage, actively hunts agents - VERY DANGEROUS)
 - plant: Vegetation (gives +20 energy when foraged)
 - meat: Corpse from dead entity (gives energy when foraged, decays over time)
 - bones: Decayed meat (no energy value)

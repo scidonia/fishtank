@@ -118,6 +118,7 @@ export class WorldServer {
         
         // Spawn animals
         this.spawnAnimals(50, 15); // 50 rabbits, 15 deer (further reduced to balance food)
+        this.spawnPredators(5, 5); // 5 wolves, 5 bears
     }
     
     loadMapFromFile(filePath) {
@@ -217,6 +218,13 @@ export class WorldServer {
     }
     
     spawnAgent(id, x, y, parents = null) {
+        // Check if agent ID already exists
+        const existing = this.entities.find(e => e.id === id && e.type === 'agent');
+        if (existing) {
+            console.log(`  ⚠️  Cannot spawn agent "${id}" - ID already exists`);
+            return null;
+        }
+        
         // Generate random appearance
         const gender = this.rng() > 0.5 ? 'male' : 'female';
         const skinTones = ['#ffc9a3', '#d9a574', '#a67c52', '#6d4c3d', '#3d2817'];
@@ -255,6 +263,7 @@ export class WorldServer {
             parents, // Array of parent IDs if this agent was born from mating
         });
         this.broadcastPublic({ type: 'spawn', message: `Agent ${id} spawned` });
+        return true; // Indicate successful spawn
     }
     
     spawnFoodSources(count) {
@@ -336,6 +345,67 @@ export class WorldServer {
         
         console.log(`✓ Spawned ${rabbitsSpawned} rabbits, ${deerSpawned} deer`);
     }
+
+    spawnPredators(wolfCount, bearCount) {
+        let wolvesSpawned = 0;
+        let bearsSpawned = 0;
+        let attempts = 0;
+        const maxAttempts = (wolfCount + bearCount) * 20;
+
+        // Spawn predators far from agents' starting cluster
+        const agentPositions = this.entities
+            .filter(e => e.type === 'agent')
+            .map(e => e.pos);
+
+        while ((wolvesSpawned < wolfCount || bearsSpawned < bearCount) && attempts < maxAttempts) {
+            const x = Math.floor(this.rng() * this.width);
+            const y = Math.floor(this.rng() * this.height);
+
+            if (this.map[y] && this.map[y][x] === '.') {
+                const occupied = this.entities.some(e => e.pos[0] === x && e.pos[1] === y);
+                // Keep predators 15-150 tiles away from agents at spawn
+                const tooClose = agentPositions.some(([ax, ay]) =>
+                    Math.abs(ax - x) < 15 && Math.abs(ay - y) < 15
+                );
+                const tooFar = agentPositions.length > 0 && !agentPositions.some(([ax, ay]) =>
+                    Math.abs(ax - x) < 150 && Math.abs(ay - y) < 150
+                );
+
+                if (!occupied && !tooClose && !tooFar) {
+                    if (wolvesSpawned < wolfCount && this.rng() < 0.5) {
+                        const variant = this.rng() < 0.5 ? 'grey_wolf' : 'dark_wolf';
+                        this.entities.push({
+                            id: `wolf_${wolvesSpawned}`,
+                            type: variant,
+                            pos: [x, y],
+                            hp: 60,
+                            maxHp: 60,
+                            energy: 70,
+                            fov: 15,
+                            damage: 20, // Wolves hit hard
+                        });
+                        wolvesSpawned++;
+                    } else if (bearsSpawned < bearCount) {
+                        const variant = this.rng() < 0.5 ? 'grizzly' : 'black_bear';
+                        this.entities.push({
+                            id: `bear_${bearsSpawned}`,
+                            type: variant,
+                            pos: [x, y],
+                            hp: 150,
+                            maxHp: 150,
+                            energy: 80,
+                            fov: 12,
+                            damage: 30, // Bears hit very hard
+                        });
+                        bearsSpawned++;
+                    }
+                }
+            }
+            attempts++;
+        }
+
+        console.log(`✓ Spawned ${wolvesSpawned} wolves, ${bearsSpawned} bears`);
+    }
     
     start() {
         if (this.running) return;
@@ -360,15 +430,13 @@ export class WorldServer {
         
         // Check if max turns reached
         if (this.maxTurns !== null && this.turnId > this.maxTurns) {
-            console.log(`\n⏰ MAX TURNS REACHED (${this.maxTurns}) - Ending run...`);
-            this.running = false;
-            // End run asynchronously with LLM summary
+            console.log(`\n⏰ MAX TURNS REACHED (${this.maxTurns}) - Starting new round...`);
             this.logger.endRun().then(() => {
-                console.log('✓ World run ended due to turn limit');
-                process.exit(0);
+                console.log('✓ Round ended due to turn limit, resetting world...');
+                this.resetWorld();
             }).catch(err => {
                 console.error('Error ending run:', err);
-                process.exit(1);
+                this.resetWorld();
             });
             return;
         }
@@ -408,9 +476,10 @@ export class WorldServer {
             console.log(`  ⚠️  Timeout waiting for agents`);
         }
         
-        // Get animals that can act (alive animals)
+        // Get animals that can act (alive animals + predators)
+        const predatorTypes = ['grizzly', 'black_bear', 'grey_wolf', 'dark_wolf'];
         const animals = this.entities
-            .filter(e => (e.type === 'rabbit' || e.type === 'deer') && e.hp > 0)
+            .filter(e => (e.type === 'rabbit' || e.type === 'deer' || predatorTypes.includes(e.type)) && e.hp > 0)
             .sort((a, b) => a.id.localeCompare(b.id));
         
         // Compute animal actions (server-side AI)
@@ -460,15 +529,13 @@ export class WorldServer {
         // Check if all agents are dead (end run condition)
         const aliveAgents = this.entities.filter(e => e.type === 'agent' && e.hp > 0);
         if (aliveAgents.length === 0 && this.turnId > 1) {
-            console.log('\n⚰️  ALL AGENTS DIED - Ending run...');
-            this.running = false;
-            // End run asynchronously (don't block turn loop)
+            console.log('\n⚰️  ALL AGENTS DIED - Starting new round...');
             this.logger.endRun().then(() => {
-                console.log('✓ World run ended due to extinction');
-                process.exit(0);
+                console.log('✓ Round ended, resetting world...');
+                this.resetWorld();
             }).catch(err => {
                 console.error('Error ending run:', err);
-                process.exit(1);
+                this.resetWorld();
             });
         }
         
@@ -476,6 +543,69 @@ export class WorldServer {
         this.broadcastDelta();
     }
     
+    resetWorld() {
+        console.log('\n🔄 Resetting world for new round...');
+
+        // Start a fresh logger run
+        this.logger = new WorldLogger();
+
+        // Reset turn counter
+        this.turnId = 0;
+        this.logger.updateRunMetadata({
+            seed: this.seed,
+            mapWidth: this.width,
+            mapHeight: this.height,
+        });
+
+        // Clear all entities
+        this.entities = [];
+        this.actionQueue = new Map();
+        this.recentMessages = [];
+        this.recentCombatEvents = [];
+        this.exploredTiles = new Set();
+
+        // Re-seed RNG so each round is different
+        this.seed = Math.floor(Math.random() * 2147483647);
+        this.rng = this.createSeededRNG(this.seed);
+
+        // Re-spawn everything
+        const spawnPoints = this.findSpawnPoints(15);
+        const agentNames = [
+            'scout', 'nomad', 'warden', 'seeker', 'ranger',
+            'guardian', 'explorer', 'hunter', 'gatherer', 'builder'
+        ];
+
+        if (spawnPoints.length >= 10) {
+            this.spawnAgent(agentNames[0], spawnPoints[0].x, spawnPoints[0].y);
+            const spawnedPositions = [[spawnPoints[0].x, spawnPoints[0].y]];
+            let agentsSpawned = 1;
+            for (let attempts = 0; attempts < 300 && agentsSpawned < 10; attempts++) {
+                const dx = Math.floor(this.rng() * 12) - 6;
+                const dy = Math.floor(this.rng() * 12) - 6;
+                const x = spawnPoints[0].x + dx;
+                const y = spawnPoints[0].y + dy;
+                const occupied = spawnedPositions.some(([ox, oy]) => ox === x && oy === y);
+                if (x >= 0 && x < this.width && y >= 0 && y < this.height &&
+                    this.map[y] && this.map[y][x] === '.' && !occupied) {
+                    this.spawnAgent(agentNames[agentsSpawned], x, y);
+                    spawnedPositions.push([x, y]);
+                    agentsSpawned++;
+                }
+            }
+        }
+
+        this.spawnFoodSources(25000);
+        this.maxPlants = 30000;
+        this.plantGrowthRate = 1.0;
+        this.spawnAnimals(50, 15);
+        this.spawnPredators(5, 5);
+
+        // Broadcast fresh snapshot to all viewers
+        this.broadcastPublic({ type: 'snapshot', data: this.getSnapshot() });
+
+        console.log('✓ New round started!');
+    }
+
     computeObservation(agent) {
         const [agentX, agentY] = agent.pos;
         const fovRadius = 10;
@@ -594,6 +724,69 @@ export class WorldServer {
         const [animalX, animalY] = animal.pos;
         const fovRadius = animal.fov || 6;
         const isStarving = animal.energy < 20; // Low energy threshold
+        const predatorTypes = ['grizzly', 'black_bear', 'grey_wolf', 'dark_wolf'];
+        const isPredator = predatorTypes.includes(animal.type);
+
+        // --- PREDATOR AI ---
+        if (isPredator) {
+            const allDirs = ['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'];
+            const getWalkableDirs = () => allDirs.filter(dir => {
+                const [dx, dy] = this.getDirDelta(dir);
+                const nx = animalX + dx, ny = animalY + dy;
+                return ny >= 0 && ny < this.height && nx >= 0 && nx < this.width &&
+                    this.map[ny] && this.map[ny][nx] === '.';
+            });
+
+            const visible = this.entities.filter(e => {
+                if (e.id === animal.id) return false;
+                const [ex, ey] = e.pos;
+                return Math.sqrt((ex-animalX)**2 + (ey-animalY)**2) <= fovRadius;
+            });
+            const adjacent = visible.filter(e => {
+                const [ex, ey] = e.pos;
+                return Math.abs(ex-animalX) <= 1 && Math.abs(ey-animalY) <= 1;
+            });
+
+            // Always attack adjacent agents or prey
+            const adjacentPrey = adjacent.filter(e =>
+                (e.type === 'agent' || e.type === 'rabbit' || e.type === 'deer') && e.hp > 0
+            );
+            if (adjacentPrey.length > 0) {
+                return { type: 'attack', args: { target_id: adjacentPrey[0].id } };
+            }
+
+            // Eat adjacent meat if hungry
+            if (animal.energy < 60) {
+                const adjacentMeat = adjacent.filter(e => e.type === 'meat');
+                if (adjacentMeat.length > 0) {
+                    return { type: 'forage', args: {} };
+                }
+            }
+
+            // Chase visible agents first, then other prey
+            const visibleAgents = visible.filter(e => e.type === 'agent' && e.hp > 0);
+            const visiblePrey = visible.filter(e => (e.type === 'rabbit' || e.type === 'deer') && e.hp > 0);
+            const target = visibleAgents[0] || visiblePrey[0];
+
+            if (target) {
+                const [tx, ty] = target.pos;
+                const bestDir = getWalkableDirs().sort((a, b) => {
+                    const [dxa, dya] = this.getDirDelta(a);
+                    const [dxb, dyb] = this.getDirDelta(b);
+                    const distA = Math.sqrt((animalX+dxa-tx)**2 + (animalY+dya-ty)**2);
+                    const distB = Math.sqrt((animalX+dxb-tx)**2 + (animalY+dyb-ty)**2);
+                    return distA - distB;
+                })[0];
+                if (bestDir) return { type: 'move', args: { dir: bestDir } };
+            }
+
+            // Wander randomly
+            const dirs = getWalkableDirs();
+            if (dirs.length > 0) {
+                return { type: 'move', args: { dir: dirs[Math.floor(this.rng() * dirs.length)] } };
+            }
+            return { type: 'wait', args: {} };
+        }
 
         const allDirs = ['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'];
         const getWalkableDirs = () => {
@@ -1090,7 +1283,8 @@ export class WorldServer {
         }
         
         // Can attack agents and animals (entities with hp), but not plants/meat/bones
-        if (!['agent', 'rabbit', 'deer'].includes(target.type)) {
+        const attackableTypes = ['agent', 'rabbit', 'deer', 'grizzly', 'black_bear', 'grey_wolf', 'dark_wolf'];
+        if (!attackableTypes.includes(target.type)) {
             console.log(`  ${attacker.id}: attack failed - cannot attack ${target.type}`);
             return { success: false, reason: 'invalid_target', message: `Cannot attack ${target.type}` };
         }
@@ -1116,10 +1310,11 @@ export class WorldServer {
         // Hit chance based on attacker type (animals have low success)
         let hitChance = 1.0; // Agents always hit
         if (attacker.type === 'rabbit') {
-            hitChance = 0.20; // 20% chance
+            hitChance = 0.20;
         } else if (attacker.type === 'deer') {
-            hitChance = 0.35; // 35% chance
+            hitChance = 0.35;
         }
+        // Predators always hit
         
         // Roll for hit
         if (this.rng() > hitChance) {
@@ -1127,10 +1322,10 @@ export class WorldServer {
             return { success: false, reason: 'miss', message: `Attack missed!` };
         }
         
-        // Calculate damage (base damage + some randomness)
-        const baseDamage = 10;
+        // Calculate damage - use entity's own damage value if set, else base 10
+        const baseDamage = attacker.damage || 10;
         const variance = Math.floor(this.rng() * 6) - 2; // -2 to +3
-        const damage = Math.max(1, baseDamage + variance); // Minimum 1 damage
+        const damage = Math.max(1, baseDamage + variance);
         
         // Apply damage
         const oldHp = target.hp;
@@ -1303,6 +1498,15 @@ export class WorldServer {
         
         console.log(`  ${agent.id}: updated prompt (${oldPrompt.length} -> ${truncatedText.length} chars)${wasTruncated ? ' (TRUNCATED)' : ''}`);
         
+        // Broadcast prompt update to surveillance clients
+        this.broadcastToSurveillance(agent.id, { 
+            type: 'prompt_update', 
+            data: { 
+                agent_id: agent.id,
+                prompt: truncatedText 
+            } 
+        });
+        
         const resultMessage = wasTruncated
             ? `Updated persistent prompt (TRUNCATED from ${originalLength} to ${maxLength} chars)`
             : `Updated persistent prompt (${truncatedText.length} characters)`;
@@ -1338,6 +1542,15 @@ export class WorldServer {
         agent.notes = truncatedText;
         
         console.log(`  ${agent.id}: updated notes (${oldNotes.length} -> ${truncatedText.length} chars)${wasTruncated ? ' (TRUNCATED)' : ''}`);
+        
+        // Broadcast notes update to surveillance clients
+        this.broadcastToSurveillance(agent.id, { 
+            type: 'notes_update', 
+            data: { 
+                agent_id: agent.id,
+                notes: truncatedText 
+            } 
+        });
         
         const resultMessage = wasTruncated
             ? `Wrote to private notes (TRUNCATED from ${originalLength} to ${maxLength} chars)`
@@ -1468,10 +1681,31 @@ export class WorldServer {
         console.log(`  📝 Fused prompt for offspring: "${fusedPrompt}"`);
         
         // Generate a personality-based name for the offspring
-        const childName = await this.generateOffspringName(agent.id, partner.id, fusedPrompt);
+        let childName = await this.generateOffspringName(agent.id, partner.id, fusedPrompt);
+        
+        // Ensure name is unique - if it already exists, append a number
+        let nameAttempt = 0;
+        let uniqueName = childName;
+        while (this.entities.find(e => e.id === uniqueName && e.type === 'agent')) {
+            nameAttempt++;
+            uniqueName = `${childName}${nameAttempt}`;
+            if (nameAttempt > 100) {
+                // Fallback to guaranteed unique name
+                uniqueName = `child_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+                break;
+            }
+        }
+        childName = uniqueName;
         
         // Spawn the offspring with generated name
-        this.spawnAgent(childName, spawnX, spawnY, [agent.id, partner.id]);
+        const spawnResult = this.spawnAgent(childName, spawnX, spawnY, [agent.id, partner.id]);
+        if (!spawnResult) {
+            // Spawn failed (shouldn't happen due to above check, but just in case)
+            console.log(`  ${agent.id}: mate failed - could not spawn offspring`);
+            agent.energy += matingCost;
+            partner.energy += matingCost;
+            return { success: false, reason: 'spawn_failed', message: 'Failed to spawn offspring' };
+        }
         
         // Set the child's fused prompt
         const child = this.entities.find(e => e.id === childName);

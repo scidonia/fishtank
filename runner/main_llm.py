@@ -75,7 +75,9 @@ class LLMAgentRunner:
         self.running = True
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            # Use longer timeout for SSE stream (None = no timeout on reads)
+            timeout = httpx.Timeout(10.0, read=None)
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 await self.subscribe_to_observations(client)
         except KeyboardInterrupt:
             console.print("\n[yellow]Agent stopped by user[/yellow]")
@@ -127,7 +129,7 @@ class LLMAgentRunner:
 
         # Set initial personality prompt on first observation if empty
         if self.turn_count == 1 and not obs.get("prompt"):
-            from agent import get_initial_personality_prompt
+            from runner.agent import get_initial_personality_prompt
 
             # Use starting_prompt if provided, otherwise use personality default
             if self.starting_prompt:
@@ -137,16 +139,18 @@ class LLMAgentRunner:
                 initial_prompt = get_initial_personality_prompt(self.config)
                 reasoning = "Setting initial traits"
 
-            await self.submit_action(
-                client,
-                turn_id,
-                {
-                    "action": "edit_prompt",
-                    "args": {"text": initial_prompt},
-                    "reasoning": reasoning,
-                },
-            )
-            return
+            # Only set prompt if there's actually content (skip for empty/neutral)
+            if initial_prompt:
+                await self.submit_action(
+                    client,
+                    turn_id,
+                    {
+                        "action": "edit_prompt",
+                        "args": {"text": initial_prompt},
+                        "reasoning": reasoning,
+                    },
+                )
+                return
         health = obs["health"]
         energy = obs.get(
             "energy", obs.get("hunger", 100)

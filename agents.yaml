@@ -1,5 +1,5 @@
 # Fish Tank Default Agent Configuration
-# 10 agents with mixed personalities, more aggression for drama
+# Match the 10 agents spawned by the server
 
 use_mock: false  # Set to true to use mock LLM (no API key needed)
 # max_turns: 100  # Optional: end run after N turns (uncomment to enable)
@@ -10,16 +10,17 @@ agents:
     personality: aggressive
     avatar: hunter.png
   
-  - id: warrior
+  - id: seeker
     personality: aggressive
   
-  - id: reaper
+  - id: explorer
     personality: aggressive
   
-  - id: slayer
+  - id: warden
     personality: aggressive
+    avatar: warden.png
   
-  # Explorer agents - curious and adventurous (but not passive)
+  # Explorer agents - curious and adventurous
   - id: scout
     personality: explorer
   
@@ -33,15 +34,11 @@ agents:
   - id: gatherer
     personality: cooperative
   
-  # Survivor agents - practical and focused on staying alive
+  # Survivor agent - practical and focused on staying alive
   - id: ranger
     personality: survivor
     avatar: ranger.png
   
-  # Cautious agents - avoid risks and scout carefully
+  # Cautious agent - avoid risks and scout carefully
   - id: guardian
     personality: cautious
-  
-  - id: warden
-    personality: cautious
-    avatar: warden.png

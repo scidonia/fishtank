@@ -61,7 +61,15 @@ class WorldViewer {
         }
         
         // Load entity sprites
-        const entities = ['agent', 'rabbit', 'deer', 'warden', 'seeker', 'ranger', 'hunter'];
+        const entities = [
+            // Generic fallbacks
+            'agent', 'rabbit', 'deer',
+            // Named agent sprites
+            'scout', 'nomad', 'warden', 'seeker', 'ranger',
+            'guardian', 'explorer', 'hunter', 'gatherer', 'builder',
+            // Predators
+            'grizzly', 'black_bear', 'grey_wolf', 'dark_wolf',
+        ];
         for (const entity of entities) {
             const img = new Image();
             img.src = `tiles/entities/${entity}.png`;
@@ -508,12 +516,16 @@ class WorldViewer {
         if (entity.type === 'agent' && this.tilesLoaded && this.tiles.entities[entity.id]) {
             // Use agent-specific sprite (e.g., warden.png, seeker.png)
             this.ctx.drawImage(this.tiles.entities[entity.id], px, py, this.tileSize, this.tileSize);
+            this.renderHealthBar(entity, px, py);
         } else if (entity.type === 'agent' && entity.appearance) {
             // Fallback to paper doll rendering for agents without custom sprites
             this.renderAgent(entity, px, py);
+            this.renderHealthBar(entity, px, py);
         } else if (this.tilesLoaded && this.tiles.entities[entity.type]) {
             // Use generic type sprite (rabbit, deer)
             this.ctx.drawImage(this.tiles.entities[entity.type], px, py, this.tileSize, this.tileSize);
+            const predatorTypes = ['grizzly', 'black_bear', 'grey_wolf', 'dark_wolf'];
+            if (predatorTypes.includes(entity.type)) this.renderHealthBar(entity, px, py);
         } else {
             const colors = {
                 'agent': '#4fc3f7',
@@ -578,6 +590,27 @@ class WorldViewer {
         }
     }
     
+    renderHealthBar(entity, px, py) {
+        const maxHp = entity.maxHp || 100;
+        const hp = entity.hp || 0;
+        const pct = Math.max(0, Math.min(1, hp / maxHp));
+
+        const barW = this.tileSize - 4;
+        const barH = 3;
+        const barX = px + 2;
+        const barY = py + this.tileSize - barH - 1; // just above bottom edge
+
+        // Background (dark red)
+        this.ctx.fillStyle = '#550000';
+        this.ctx.fillRect(barX, barY, barW, barH);
+
+        // Foreground - colour shifts red->yellow->green
+        const r = pct < 0.5 ? 255 : Math.round(255 * (1 - pct) * 2);
+        const g = pct > 0.5 ? 255 : Math.round(255 * pct * 2);
+        this.ctx.fillStyle = `rgb(${r},${g},0)`;
+        this.ctx.fillRect(barX, barY, Math.round(barW * pct), barH);
+    }
+
     renderAgent(entity, px, py) {
         const app = entity.appearance;
         const cx = px + this.tileSize / 2;
@@ -799,6 +832,18 @@ class WorldViewer {
             this.displayAgentLog(data);
         });
         
+        this.surveillanceEventSource.addEventListener('prompt_update', (e) => {
+            const data = JSON.parse(e.data);
+            console.log('📋 Received prompt update:', data);
+            this.updateAgentPrompt(data.prompt);
+        });
+        
+        this.surveillanceEventSource.addEventListener('notes_update', (e) => {
+            const data = JSON.parse(e.data);
+            console.log('📝 Received notes update');
+            this.updateAgentNotes(data.notes);
+        });
+        
         this.surveillanceEventSource.onerror = () => {
             console.error('Surveillance stream error for', agentId);
         };
@@ -857,21 +902,31 @@ class WorldViewer {
         }
         
         // Update prompt
+        this.updateAgentPrompt(prompt);
+        
+        // Update notes
+        this.updateAgentNotes(notes);
+    }
+    
+    updateAgentPrompt(prompt) {
         const promptDisplay = document.getElementById('agent-prompt-display');
         if (prompt && prompt.trim()) {
             promptDisplay.textContent = prompt;
             promptDisplay.style.color = '#ccc';
+            promptDisplay.style.fontStyle = 'normal';
         } else {
             promptDisplay.textContent = '(No prompt set)';
             promptDisplay.style.color = '#666';
             promptDisplay.style.fontStyle = 'italic';
         }
-        
-        // Update notes
+    }
+    
+    updateAgentNotes(notes) {
         const notesDisplay = document.getElementById('agent-notes-display');
         if (notes && notes.trim()) {
             notesDisplay.textContent = notes;
             notesDisplay.style.color = '#ccc';
+            notesDisplay.style.fontStyle = 'normal';
         } else {
             notesDisplay.textContent = '(No notes)';
             notesDisplay.style.color = '#666';
