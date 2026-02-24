@@ -14,6 +14,8 @@ import json
 import argparse
 import sys
 import os
+import threading
+import urllib.request
 from pathlib import Path
 import yaml
 
@@ -275,6 +277,55 @@ class AgentLauncher:
 
         return len(DEFAULT_CONFIGS)
 
+    def watch_for_births(self, use_mock=False):
+        """Background thread: listen to public SSE stream and spawn runners for born children."""
+        url = f"{self.server_url}/stream/public"
+        print(f"  👶 Birth watcher started (listening on {url})")
+        while True:
+            try:
+                req = urllib.request.Request(
+                    url, headers={"Accept": "text/event-stream"}
+                )
+                with urllib.request.urlopen(req, timeout=300) as resp:
+                    event_type = None
+                    for raw in resp:
+                        line = raw.decode("utf-8").rstrip("\n").rstrip("\r")
+                        if line.startswith("event:"):
+                            event_type = line[6:].strip()
+                        elif line.startswith("data:") and event_type == "public":
+                            try:
+                                data = json.loads(line[5:].strip())
+                                if data.get("type") == "mate" and data.get("child_id"):
+                                    child_id = data["child_id"]
+                                    already_running = any(
+                                        p["agent_id"] == child_id
+                                        for p in self.processes
+                                    )
+                                    if not already_running:
+                                        print(
+                                            f"\n  👶 New child born: {child_id} — spawning runner"
+                                        )
+                                        self.spawn_agent(
+                                            child_id,
+                                            personality="survivor",
+                                            use_mock=use_mock,
+                                        )
+                            except (json.JSONDecodeError, KeyError):
+                                pass
+                        elif line == "":
+                            event_type = None
+            except Exception as e:
+                print(f"  ⚠️  Birth watcher connection lost ({e}), retrying in 5s...")
+                time.sleep(5)
+
+    def start_birth_watcher(self, use_mock=False):
+        """Start the birth watcher in a daemon thread."""
+        t = threading.Thread(
+            target=self.watch_for_births, args=(use_mock,), daemon=True
+        )
+        t.start()
+        return t
+
     def save_manifest(self):
         """Save agent manifest to file"""
         manifest_path = self.log_dir / "fishtank_agents.json"
@@ -521,6 +572,9 @@ Examples:
     launcher.save_manifest()
     launcher.print_summary()
 
+    # Start birth watcher so born children automatically get runner processes
+    launcher.start_birth_watcher(use_mock=args.use_mock)
+    print(f"\n👶 Birth watcher active — born children will get runners automatically")
     print(f"\n⚡ Press Ctrl+C to stop watching (agents will continue running)")
     print(f"   To kill all agents: pkill -9 -f 'main_llm.py'")
 

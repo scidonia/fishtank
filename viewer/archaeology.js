@@ -139,8 +139,10 @@ async function loadRunDetails(runId) {
         
     } catch (error) {
         console.error('Failed to load run details:', error);
-        document.getElementById('run-details-panel').innerHTML = 
-            '<div class="error">Failed to load run details.</div>';
+        const panel = document.getElementById('run-details-panel');
+        panel.style.display = 'block';
+        document.getElementById('run-events-list').innerHTML =
+            `<div class="error">Failed to load run details: ${error.message}</div>`;
     }
 }
 
@@ -257,14 +259,13 @@ function displayAgentLifespans(agents) {
 function initArchaeology() {
     loadRuns();
     
-    // Auto-refresh every 5 seconds if viewing ongoing run
+    // Auto-refresh every 10 seconds
     setInterval(() => {
+        loadRuns();
         if (selectedRunId) {
-            // Check if selected run is still ongoing
             loadRunDetails(selectedRunId);
         }
-        loadRuns();
-    }, 5000);
+    }, 10000);
 }
 
 // Export for use in main HTML

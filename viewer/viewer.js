@@ -74,6 +74,9 @@ class WorldViewer {
             'grizzly', 'black_bear', 'grey_wolf', 'dark_wolf',
             // Items
             'plant', 'plant2', 'plant3', 'meat', 'bones',
+            // Born children (up to 10 variants)
+            'child_1', 'child_2', 'child_3', 'child_4', 'child_5',
+            'child_6', 'child_7', 'child_8', 'child_9', 'child_10',
         ];
         for (const entity of entities) {
             const img = new Image();
@@ -722,9 +725,11 @@ class WorldViewer {
         agentList.innerHTML = agents.map(agent => {
             const isFocused = this.focusedAgentId === agent.id;
             const isFollowing = this.followAgent === agent.id;
+            const gen = agent.generation || 0;
+            const genTag = gen > 0 ? ` <span style="color:#f0c040;font-size:0.8em">G${gen}</span>` : '';
             return `
                 <div class="agent-item ${isFocused ? 'active' : ''}" data-agent-id="${agent.id}">
-                    <strong>${agent.id}</strong> ${isFocused ? '👁️' : ''}<br>
+                    <strong>${agent.id}</strong>${genTag} ${isFocused ? '👁️' : ''}<br>
                     Position: ${agent.pos[0]}, ${agent.pos[1]}<br>
                     HP: ${agent.hp} | Energy: ${agent.energy !== undefined ? agent.energy : agent.hunger}
                 </div>
@@ -779,8 +784,8 @@ class WorldViewer {
         this.surveillanceEventSource.addEventListener('snapshot', (e) => {
             const data = JSON.parse(e.data);
             
-            // Display agent info (prompt and notes)
-            this.displayAgentInfo(agentId, data.prompt, data.notes);
+            // Display agent info (prompt, notes, lineage)
+            this.displayAgentInfo(agentId, data.prompt, data.notes, data.generation, data.parents);
             
             // Display recent telemetry
             for (const event of data.events || []) {
@@ -836,13 +841,21 @@ class WorldViewer {
         console.log('Focus cleared');
     }
     
-    displayAgentInfo(agentId, prompt, notes) {
+    displayAgentInfo(agentId, prompt, notes, generation = 0, parents = null) {
         // Show the agent info panel
         const panel = document.getElementById('agent-info-panel');
         panel.style.display = 'block';
         
         // Update agent ID
         document.getElementById('info-agent-id').textContent = agentId;
+
+        // Update lineage
+        const lineageDisplay = document.getElementById('agent-lineage-display');
+        const genLabel = `Generation ${generation}`;
+        const parentLabel = parents && parents.length > 0 ? ` — born of ${parents.join(' & ')}` : ' — initial';
+        lineageDisplay.textContent = genLabel + parentLabel;
+        lineageDisplay.style.color = generation > 0 ? '#f0c040' : '#aaa';
+        lineageDisplay.style.fontStyle = 'normal';
         
         // Update inventory from world state
         const inventoryDisplay = document.getElementById('agent-inventory-display');

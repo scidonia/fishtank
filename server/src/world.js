@@ -251,6 +251,16 @@ export class WorldServer {
             });
         }
         
+        // Compute generation: 0 for initial spawns, max(parent generations) + 1 for born agents
+        let generation = 0;
+        if (parents && parents.length > 0) {
+            const parentGenerations = parents.map(pid => {
+                const p = this.entities.find(e => e.id === pid);
+                return p ? (p.generation || 0) : 0;
+            });
+            generation = Math.max(...parentGenerations) + 1;
+        }
+
         this.entities.push({
             id,
             type: 'agent',
@@ -263,6 +273,7 @@ export class WorldServer {
             appearance, // Visual appearance for rendering
             avatar, // Sprite filename stem (e.g. 'scout', 'shaman') - null means use paper doll
             parents, // Array of parent IDs if this agent was born from mating
+            generation, // Generation number (0 = initial, 1 = first born, etc.)
         });
         this.broadcastPublic({ type: 'spawn', message: `Agent ${id} spawned` });
         return true; // Indicate successful spawn
@@ -1677,29 +1688,35 @@ export class WorldServer {
             return { success: false, reason: 'no_space', message: 'No adjacent space for offspring' };
         }
         
-        // Fuse prompts from parents (if they have any)
-        const fusedPrompt = await this.fusePrompts(agent.prompt, partner.prompt);
-        console.log(`  📝 Fused prompt for offspring: "${fusedPrompt}"`);
+        // Generate a personality-based name for the offspring first (pass existing names to avoid collisions)
+        const existingNames = this.entities.filter(e => e.type === 'agent').map(e => e.id);
+        let childName = await this.generateOffspringName(agent.id, partner.id, '', existingNames);
         
-        // Generate a personality-based name for the offspring
-        let childName = await this.generateOffspringName(agent.id, partner.id, fusedPrompt);
-        
-        // Ensure name is unique - if it already exists, append a number
-        let nameAttempt = 0;
-        let uniqueName = childName;
-        while (this.entities.find(e => e.id === uniqueName && e.type === 'agent')) {
-            nameAttempt++;
-            uniqueName = `${childName}${nameAttempt}`;
-            if (nameAttempt > 100) {
-                // Fallback to guaranteed unique name
-                uniqueName = `child_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-                break;
+        // Ensure name is unique before fusing prompt (so the name is known)
+        {
+            let nameAttempt = 0;
+            let uniqueName = childName;
+            while (this.entities.find(e => e.id === uniqueName && e.type === 'agent')) {
+                nameAttempt++;
+                uniqueName = `${childName}${nameAttempt}`;
+                if (nameAttempt > 100) {
+                    uniqueName = `child_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+                    break;
+                }
             }
+            childName = uniqueName;
         }
-        childName = uniqueName;
+
+        // Fuse prompts from parents, now that we know the child's name
+        const fusedPrompt = await this.fusePrompts(agent.prompt, partner.prompt, childName);
+        console.log(`  📝 Fused prompt for offspring ${childName}: "${fusedPrompt}"`);
         
+        // Pick a child avatar (cycles through child_1 .. child_10 based on born count)
+        const bornCount = this.entities.filter(e => e.type === 'agent' && e.parents && e.parents.length > 0).length;
+        const childAvatar = `child_${(bornCount % 10) + 1}`;
+
         // Spawn the offspring with generated name
-        const spawnResult = this.spawnAgent(childName, spawnX, spawnY, [agent.id, partner.id]);
+        const spawnResult = this.spawnAgent(childName, spawnX, spawnY, [agent.id, partner.id], childAvatar);
         if (!spawnResult) {
             // Spawn failed (shouldn't happen due to above check, but just in case)
             console.log(`  ${agent.id}: mate failed - could not spawn offspring`);
@@ -1730,13 +1747,15 @@ export class WorldServer {
         };
     }
     
-    async fusePrompts(prompt1, prompt2) {
-        // If neither parent has a prompt, return empty
-        if (!prompt1 && !prompt2) return '';
+    async fusePrompts(prompt1, prompt2, childName = null) {
+        const namePrefix = childName ? `I am ${childName}. ` : '';
+
+        // If neither parent has a prompt, return a basic self-identity prompt
+        if (!prompt1 && !prompt2) return childName ? `I am ${childName}, born into this world. Seek purpose through exploration and survival.` : '';
         
-        // If only one parent has a prompt, return it (or use LLM to generalize)
-        if (!prompt1) return prompt2.substring(0, 300);
-        if (!prompt2) return prompt1.substring(0, 300);
+        // If only one parent has a prompt, personalise it for the child
+        if (!prompt1) return (namePrefix + prompt2).substring(0, 300);
+        if (!prompt2) return (namePrefix + prompt1).substring(0, 300);
         
         // Both parents have prompts - use LLM to intelligently fuse them
         const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -1744,10 +1763,13 @@ export class WorldServer {
         // Fallback to simple fusion if no API key
         if (!apiKey) {
             console.log('  No DEEPSEEK_API_KEY set, using simple prompt fusion');
-            return `Born from two agents. Inherited mixed traits from both parents.`;
+            return `${namePrefix}Born from two agents. Inherited mixed traits from both parents.`;
         }
         
         try {
+            const nameInstruction = childName
+                ? `6. Begin the prompt with "I am ${childName}." so the agent knows its own name`
+                : '';
             const llmPrompt = `You are creating an inherited personality prompt for an offspring agent in a survival simulation.
 
 PARENT 1 PROMPT:
@@ -1761,9 +1783,9 @@ TASK: Create a NEW prompt for their offspring that:
 2. Does NOT copy specific names or partner references
 3. Generalizes the goals so the offspring can apply them to their own life
 4. Is concise and actionable
-5. MUST be 250 characters or less
+5. MUST be 250 characters or less${nameInstruction ? '\n' + nameInstruction : ''}
 
-IMPORTANT: Do not include parent names or specific individuals. Focus on behaviors and values.
+IMPORTANT: Do not reference parent names or specific individuals. Focus on behaviors and values.
 
 Respond with ONLY the fused prompt text, nothing else.`;
 
@@ -1798,32 +1820,39 @@ Respond with ONLY the fused prompt text, nothing else.`;
             
         } catch (error) {
             console.error('  Failed to fuse prompts with LLM:', error.message);
-            // Fallback to simple fusion
-            return `Born from two agents. Seek purpose through exploration and survival.`;
+            return `${namePrefix}Born from two agents. Seek purpose through exploration and survival.`;
         }
     }
     
-    async generateOffspringName(parent1Id, parent2Id, fusedPrompt) {
+    async generateOffspringName(parent1Id, parent2Id, fusedPrompt, existingNames = []) {
         // Get DeepSeek API key from environment
         const apiKey = process.env.DEEPSEEK_API_KEY;
-        
+
+        // Short fallback name pool for when LLM is unavailable
+        const fallbackPool = ['ash','bryn','cael','dex','eira','fenn','gale','holt','iver','jax','kael','lyr','mora','nox','ori','pell','quill','ryn','sel','tove','ulric','vale','wren','xan','yael','zev'];
+        const unusedFallback = fallbackPool.filter(n => !existingNames.includes(n));
+        const fallbackName = unusedFallback.length > 0
+            ? unusedFallback[Math.floor(Math.random() * unusedFallback.length)]
+            : `s${Date.now() % 10000}`;
+
         // Fallback to simple naming if no API key
         if (!apiKey) {
             console.log('  No DEEPSEEK_API_KEY set, using fallback naming');
-            return `child_${parent1Id}_${parent2Id}_${Date.now() % 10000}`;
+            return fallbackName;
         }
         
         try {
             // Create a prompt for DeepSeek to generate a personality-based name
+            const avoidList = existingNames.length > 0 ? `\nDo NOT use any of these names (already taken): ${existingNames.join(', ')}` : '';
             const prompt = `You are naming a newborn agent in a survival simulation game.
 
 Parent 1: ${parent1Id}
 Parent 2: ${parent2Id}
-Inherited traits: ${fusedPrompt || 'None (new personality)'}
+Inherited traits: ${fusedPrompt || 'None (new personality)'}${avoidList}
 
-Generate a single appropriate name (lowercase, no spaces, 4-12 characters) that reflects the child's inherited personality traits. The name should be evocative and meaningful.
+Generate a single short name (lowercase, no spaces, 3-8 characters) that is evocative and fits the world. It should sound like a person's name, not a description.
 
-Examples: scout, warden, seeker, hunter, guardian, nomad, healer, mystic, sage, rogue
+Examples: ash, bryn, cael, dex, eira, fenn, gale, holt, iver, lyr, mora, nox, ori, ryn, sel, tove, vale, wren, zev
 
 Respond with ONLY the name, nothing else.`;
 
@@ -1848,17 +1877,17 @@ Respond with ONLY the name, nothing else.`;
             
             const generatedName = response.data.choices[0].message.content.trim().toLowerCase();
             
-            // Validate the name (must be 4-12 chars, alphanumeric+underscore only)
-            if (/^[a-z0-9_]{4,12}$/.test(generatedName)) {
+            // Validate the name (must be 3-8 chars, letters only, not already taken)
+            if (/^[a-z]{3,8}$/.test(generatedName) && !existingNames.includes(generatedName)) {
                 console.log(`  Generated offspring name: ${generatedName}`);
                 return generatedName;
             } else {
-                console.log(`  Generated invalid name "${generatedName}", using fallback`);
-                return `child_${parent1Id}_${parent2Id}_${Date.now() % 10000}`;
+                console.log(`  Generated invalid or taken name "${generatedName}", using fallback`);
+                return fallbackName;
             }
         } catch (error) {
             console.error('  Failed to generate name with DeepSeek:', error.message);
-            return `child_${parent1Id}_${parent2Id}_${Date.now() % 10000}`;
+            return fallbackName;
         }
     }
     
@@ -2112,6 +2141,8 @@ Respond with ONLY the name, nothing else.`;
             events: this.telemetryByAgent.get(agentId) || [],
             prompt: agent ? agent.prompt : '',
             notes: agent ? agent.notes : '',
+            generation: agent ? (agent.generation || 0) : 0,
+            parents: agent ? (agent.parents || null) : null,
         };
     }
     
