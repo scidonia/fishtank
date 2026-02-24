@@ -51,7 +51,8 @@ export class WorldLogger {
                 world_summary TEXT,
                 seed INTEGER,
                 map_width INTEGER,
-                map_height INTEGER
+                map_height INTEGER,
+                mating_cost INTEGER
             );
             
             CREATE TABLE IF NOT EXISTS events (
@@ -84,6 +85,12 @@ export class WorldLogger {
             CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id, turn);
             CREATE INDEX IF NOT EXISTS idx_agents_run ON agent_lifespans(run_id);
         `);
+
+        // Migrate: add mating_cost column if missing (for existing DBs)
+        const columns = this.db.prepare(`PRAGMA table_info(runs)`).all();
+        if (!columns.find(c => c.name === 'mating_cost')) {
+            this.db.exec(`ALTER TABLE runs ADD COLUMN mating_cost INTEGER`);
+        }
     }
     
     createRun() {
@@ -109,6 +116,10 @@ export class WorldLogger {
         if (metadata.mapHeight !== undefined) {
             updates.push('map_height = ?');
             params.push(metadata.mapHeight);
+        }
+        if (metadata.matingCost !== undefined) {
+            updates.push('mating_cost = ?');
+            params.push(metadata.matingCost);
         }
         
         if (updates.length > 0) {

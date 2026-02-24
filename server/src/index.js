@@ -14,15 +14,18 @@ app.use((req, res, next) => {
 
 // Initialize world server with large map
 const MAX_TURNS = process.env.MAX_TURNS ? parseInt(process.env.MAX_TURNS) : null;
+const MATING_COST = process.env.MATING_COST !== undefined ? parseInt(process.env.MATING_COST, 10) : 0;
 const world = new WorldServer({ 
     seed: 42, 
     mapFile: 'shared/map.txt',
-    maxTurns: MAX_TURNS
+    maxTurns: MAX_TURNS,
+    matingCost: MATING_COST,
 });
 
 if (MAX_TURNS) {
     console.log(`⏰ Run will end after ${MAX_TURNS} turns`);
 }
+console.log(`💕 Mating cost: ${MATING_COST} energy per parent`);
 
 // SSE endpoint for public stream
 app.get('/stream/public', (req, res) => {
@@ -70,6 +73,22 @@ app.get('/stream/agent', (req, res) => {
     req.on('close', () => {
         world.unregisterAgentClient(agentId, clientId);
     });
+});
+
+// Agent registration endpoint - spawns agent into world on demand
+app.post('/register', (req, res) => {
+    const { agent_id, avatar } = req.body;
+
+    if (!agent_id) {
+        return res.status(400).json({ error: 'agent_id required' });
+    }
+
+    const result = world.spawnAgent(agent_id, null, null, null, avatar || null);
+    if (result === null) {
+        // Already exists - that's fine, just reconnecting
+        return res.json({ ok: true, status: 'already_exists' });
+    }
+    res.json({ ok: true, status: 'spawned' });
 });
 
 // Action submission endpoint
@@ -129,6 +148,14 @@ app.get('/stream/surveillance', (req, res) => {
 // Health check
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', turn: world.turnId });
+});
+
+// Force end the current round and start a new one
+app.post('/reset', async (req, res) => {
+    console.log('\n🔁 Manual reset requested...');
+    res.json({ ok: true, message: 'Resetting world...' });
+    await world.logger.endRun().catch(err => console.error('Error ending run:', err));
+    await world.resetWorld();
 });
 
 // Narrator submission endpoint

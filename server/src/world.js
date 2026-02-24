@@ -9,12 +9,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export class WorldServer {
-    constructor({ seed = 42, mapFile = null, maxTurns = null }) {
+    constructor({ seed = 42, mapFile = null, maxTurns = null, matingCost = 0 }) {
         this.seed = seed;
         this.rng = this.createSeededRNG(seed);
         
         this.turnId = 0;
         this.maxTurns = maxTurns; // Optional turn limit (null = unlimited)
+        this.matingCost = Math.max(0, parseInt(matingCost, 10) || 0);
         this.running = false;
         this.turnInterval = 1000; // ms per turn
         
@@ -35,7 +36,8 @@ export class WorldServer {
         this.logger.updateRunMetadata({
             seed: this.seed,
             mapWidth: this.width,
-            mapHeight: this.height
+            mapHeight: this.height,
+            matingCost: this.matingCost,
         });
         
         // World state
@@ -62,53 +64,10 @@ export class WorldServer {
         this.agentClients = new Map(); // agentId -> Map(clientId -> callback)
         this.surveillanceClients = new Map(); // agentId -> Map(clientId -> callback)
         
-        // Find spawn points in the map (floor tiles)
-        const spawnPoints = this.findSpawnPoints(15);
-        
-        // Initialize world with 10 agents at valid spawn points
-        // Spawn agents close together for easier interaction
-        const agentNames = [
-            'scout', 'nomad', 'warden', 'seeker', 'ranger',
-            'guardian', 'explorer', 'hunter', 'gatherer', 'builder'
-        ];
-        
-        if (spawnPoints.length >= 10) {
-            // Spawn first agent
-            this.spawnAgent(agentNames[0], spawnPoints[0].x, spawnPoints[0].y);
-            const spawnedPositions = [[spawnPoints[0].x, spawnPoints[0].y]];
-            
-            // Spawn remaining 9 agents nearby
-            let agentsSpawned = 1;
-            for (let attempts = 0; attempts < 300 && agentsSpawned < 10; attempts++) {
-                const dx = Math.floor(this.rng() * 12) - 6; // -6 to +5
-                const dy = Math.floor(this.rng() * 12) - 6;
-                const x = spawnPoints[0].x + dx;
-                const y = spawnPoints[0].y + dy;
-                
-                // Check valid floor tile and not already occupied
-                const occupied = spawnedPositions.some(([ox, oy]) => ox === x && oy === y);
-                if (x >= 0 && x < this.width && y >= 0 && y < this.height &&
-                    this.map[y] && this.map[y][x] === '.' && !occupied) {
-                    
-                    this.spawnAgent(agentNames[agentsSpawned], x, y);
-                    console.log(`  ${agentNames[agentsSpawned]} spawned ${Math.abs(dx)}+${Math.abs(dy)} tiles from scout`);
-                    spawnedPositions.push([x, y]);
-                    agentsSpawned++;
-                }
-            }
-            
-            // Fallback to distant spawn points if needed
-            for (let i = agentsSpawned; i < 10 && i < spawnPoints.length; i++) {
-                this.spawnAgent(agentNames[i], spawnPoints[i].x, spawnPoints[i].y);
-                console.log(`  ${agentNames[i]} spawned at distant point`);
-            }
-        } else {
-            console.warn('Not enough spawn points found, spawning agents at available points');
-            for (let i = 0; i < Math.min(10, spawnPoints.length); i++) {
-                this.spawnAgent(agentNames[i], spawnPoints[i].x, spawnPoints[i].y);
-            }
-        }
-        
+        // Agents are spawned on demand via POST /register - no hardcoded list
+        this.agentSpawnOrigin = null; // Set on first agent registration, others spawn nearby
+        this.hadAgentsThisRound = false; // Track if any agent has ever registered this round
+
         // Spawn initial food sources (plants)
         this.spawnFoodSources(25000); // Start with 25000 plants (2.5% density on 1000x1000 map)
         
@@ -217,14 +176,56 @@ export class WorldServer {
         return map;
     }
     
-    spawnAgent(id, x, y, parents = null) {
+    spawnAgent(id, x, y, parents = null, avatar = null) {
         // Check if agent ID already exists
         const existing = this.entities.find(e => e.id === id && e.type === 'agent');
         if (existing) {
-            console.log(`  ⚠️  Cannot spawn agent "${id}" - ID already exists`);
+            console.log(`  ⚠️  Agent "${id}" already exists, skipping spawn`);
             return null;
         }
-        
+
+        // If no position given, spawn near existing agents (cluster spawn)
+        if (x === null || x === undefined || y === null || y === undefined) {
+            if (!this.agentSpawnOrigin) {
+                // First agent - pick a random valid floor tile as the cluster origin
+                const spawnPoints = this.findSpawnPoints(5);
+                if (spawnPoints.length === 0) {
+                    console.log(`  ⚠️  No valid spawn points for agent "${id}"`);
+                    return null;
+                }
+                const pt = spawnPoints[Math.floor(this.rng() * spawnPoints.length)];
+                this.agentSpawnOrigin = { x: pt.x, y: pt.y };
+            }
+            // Spawn within ~10 tiles of the cluster origin
+            const clusterRadius = 10;
+            let placed = false;
+            for (let attempt = 0; attempt < 200; attempt++) {
+                const dx = Math.floor(this.rng() * (clusterRadius * 2 + 1)) - clusterRadius;
+                const dy = Math.floor(this.rng() * (clusterRadius * 2 + 1)) - clusterRadius;
+                const cx = this.agentSpawnOrigin.x + dx;
+                const cy = this.agentSpawnOrigin.y + dy;
+                if (cx >= 0 && cx < this.width && cy >= 0 && cy < this.height &&
+                    this.map[cy] && this.map[cy][cx] === '.' &&
+                    !this.entities.some(e => e.pos[0] === cx && e.pos[1] === cy)) {
+                    x = cx;
+                    y = cy;
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                console.log(`  ⚠️  Could not find cluster spawn point for "${id}", falling back to random`);
+                const spawnPoints = this.findSpawnPoints(5);
+                if (spawnPoints.length === 0) return null;
+                const pt = spawnPoints[Math.floor(this.rng() * spawnPoints.length)];
+                x = pt.x;
+                y = pt.y;
+            }
+        }
+
+        console.log(`  ✓ Spawning agent "${id}" at (${x}, ${y})`);
+        this.hadAgentsThisRound = true;
+
         // Generate random appearance
         const gender = this.rng() > 0.5 ? 'male' : 'female';
         const skinTones = ['#ffc9a3', '#d9a574', '#a67c52', '#6d4c3d', '#3d2817'];
@@ -260,6 +261,7 @@ export class WorldServer {
             prompt: '', // Persistent prompt (always shown, edited with edit_prompt)
             notes: '', // Private notes (only shown on read_notes action, edited with edit_notes)
             appearance, // Visual appearance for rendering
+            avatar, // Sprite filename stem (e.g. 'scout', 'shaman') - null means use paper doll
             parents, // Array of parent IDs if this agent was born from mating
         });
         this.broadcastPublic({ type: 'spawn', message: `Agent ${id} spawned` });
@@ -414,6 +416,13 @@ export class WorldServer {
     }
     
     async runTurnLoop() {
+        // Wait for at least one agent to register before starting turns
+        console.log('⏳ Waiting for agents to register before starting turns...');
+        while (this.running && this.entities.filter(e => e.type === 'agent').length === 0) {
+            await this.sleep(500);
+        }
+        console.log(`✓ Agents registered, starting turn loop`);
+
         while (this.running) {
             await this.executeTurn();
             await this.sleep(this.turnInterval);
@@ -431,12 +440,12 @@ export class WorldServer {
         // Check if max turns reached
         if (this.maxTurns !== null && this.turnId > this.maxTurns) {
             console.log(`\n⏰ MAX TURNS REACHED (${this.maxTurns}) - Starting new round...`);
-            this.logger.endRun().then(() => {
+            this.logger.endRun().then(async () => {
                 console.log('✓ Round ended due to turn limit, resetting world...');
-                this.resetWorld();
-            }).catch(err => {
+                await this.resetWorld();
+            }).catch(async err => {
                 console.error('Error ending run:', err);
-                this.resetWorld();
+                await this.resetWorld();
             });
             return;
         }
@@ -528,14 +537,14 @@ export class WorldServer {
         
         // Check if all agents are dead (end run condition)
         const aliveAgents = this.entities.filter(e => e.type === 'agent' && e.hp > 0);
-        if (aliveAgents.length === 0 && this.turnId > 1) {
+        if (aliveAgents.length === 0 && this.turnId > 1 && this.hadAgentsThisRound) {
             console.log('\n⚰️  ALL AGENTS DIED - Starting new round...');
-            this.logger.endRun().then(() => {
+            this.logger.endRun().then(async () => {
                 console.log('✓ Round ended, resetting world...');
-                this.resetWorld();
-            }).catch(err => {
+                await this.resetWorld();
+            }).catch(async err => {
                 console.error('Error ending run:', err);
-                this.resetWorld();
+                await this.resetWorld();
             });
         }
         
@@ -543,7 +552,7 @@ export class WorldServer {
         this.broadcastDelta();
     }
     
-    resetWorld() {
+    async resetWorld() {
         console.log('\n🔄 Resetting world for new round...');
 
         // Start a fresh logger run
@@ -555,6 +564,18 @@ export class WorldServer {
             seed: this.seed,
             mapWidth: this.width,
             mapHeight: this.height,
+            matingCost: this.matingCost,
+        });
+
+        // Reset cluster origin so next round picks a fresh spawn area
+        this.agentSpawnOrigin = null;
+        this.hadAgentsThisRound = false;
+
+        // Notify all connected agents that the world has reset so they re-register
+        this.agentClients.forEach((clients, agentId) => {
+            clients.forEach(callback => {
+                callback({ type: 'reset', data: { message: 'World reset - re-registering' } });
+            });
         });
 
         // Clear all entities
@@ -568,32 +589,6 @@ export class WorldServer {
         this.seed = Math.floor(Math.random() * 2147483647);
         this.rng = this.createSeededRNG(this.seed);
 
-        // Re-spawn everything
-        const spawnPoints = this.findSpawnPoints(15);
-        const agentNames = [
-            'scout', 'nomad', 'warden', 'seeker', 'ranger',
-            'guardian', 'explorer', 'hunter', 'gatherer', 'builder'
-        ];
-
-        if (spawnPoints.length >= 10) {
-            this.spawnAgent(agentNames[0], spawnPoints[0].x, spawnPoints[0].y);
-            const spawnedPositions = [[spawnPoints[0].x, spawnPoints[0].y]];
-            let agentsSpawned = 1;
-            for (let attempts = 0; attempts < 300 && agentsSpawned < 10; attempts++) {
-                const dx = Math.floor(this.rng() * 12) - 6;
-                const dy = Math.floor(this.rng() * 12) - 6;
-                const x = spawnPoints[0].x + dx;
-                const y = spawnPoints[0].y + dy;
-                const occupied = spawnedPositions.some(([ox, oy]) => ox === x && oy === y);
-                if (x >= 0 && x < this.width && y >= 0 && y < this.height &&
-                    this.map[y] && this.map[y][x] === '.' && !occupied) {
-                    this.spawnAgent(agentNames[agentsSpawned], x, y);
-                    spawnedPositions.push([x, y]);
-                    agentsSpawned++;
-                }
-            }
-        }
-
         this.spawnFoodSources(25000);
         this.maxPlants = 30000;
         this.plantGrowthRate = 1.0;
@@ -603,7 +598,13 @@ export class WorldServer {
         // Broadcast fresh snapshot to all viewers
         this.broadcastPublic({ type: 'snapshot', data: this.getSnapshot() });
 
-        console.log('✓ New round started!');
+        // Wait for agents to re-register before the turn loop picks up again
+        console.log('⏳ Waiting for agents to re-register (up to 30s)...');
+        const waitStart = Date.now();
+        while (Date.now() - waitStart < 30000 && this.entities.filter(e => e.type === 'agent').length === 0) {
+            await this.sleep(500);
+        }
+        console.log(`✓ New round started with ${this.entities.filter(e => e.type === 'agent').length} agents!`);
     }
 
     computeObservation(agent) {
@@ -1625,8 +1626,8 @@ export class WorldServer {
             return { success: false, reason: 'out_of_range', message: `Partner is too far away (range: ${mateRange} tile)` };
         }
         
-        // Mating costs 20 energy for each parent
-        const matingCost = 20;
+        // Mating cost (server-configured, default 0)
+        const matingCost = this.matingCost;
         if (agent.energy < matingCost) {
             console.log(`  ${agent.id}: mate failed - insufficient energy (${agent.energy}/${matingCost})`);
             return { success: false, reason: 'insufficient_energy', message: `Mating costs ${matingCost} energy, you only have ${agent.energy}` };

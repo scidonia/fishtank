@@ -64,11 +64,16 @@ class WorldViewer {
         const entities = [
             // Generic fallbacks
             'agent', 'rabbit', 'deer',
-            // Named agent sprites
+            // Named agent sprites (original set)
             'scout', 'nomad', 'warden', 'seeker', 'ranger',
             'guardian', 'explorer', 'hunter', 'gatherer', 'builder',
+            // Named agent sprites (new set)
+            'shaman', 'rogue', 'merchant', 'herbalist', 'berserker',
+            'witch', 'monk', 'bard', 'alchemist', 'assassin',
             // Predators
             'grizzly', 'black_bear', 'grey_wolf', 'dark_wolf',
+            // Items
+            'plant', 'plant2', 'plant3', 'meat', 'bones',
         ];
         for (const entity of entities) {
             const img = new Image();
@@ -512,82 +517,38 @@ class WorldViewer {
             console.log(`Rendering ${entity.id} at tile [${x},${y}] -> pixel [${px},${py}]`);
         }
         
-        // Check for agent-specific sprite first
-        if (entity.type === 'agent' && this.tilesLoaded && this.tiles.entities[entity.id]) {
-            // Use agent-specific sprite (e.g., warden.png, seeker.png)
-            this.ctx.drawImage(this.tiles.entities[entity.id], px, py, this.tileSize, this.tileSize);
+        // Check for agent-specific sprite first (via avatar field, then fall back to id lookup)
+        const avatarKey = entity.avatar || entity.id;
+        if (entity.type === 'agent' && this.tilesLoaded && this.tiles.entities[avatarKey]) {
+            this.ctx.drawImage(this.tiles.entities[avatarKey], px, py, this.tileSize, this.tileSize);
             this.renderHealthBar(entity, px, py);
         } else if (entity.type === 'agent' && entity.appearance) {
             // Fallback to paper doll rendering for agents without custom sprites
             this.renderAgent(entity, px, py);
             this.renderHealthBar(entity, px, py);
+        } else if (entity.type === 'plant' && this.tilesLoaded) {
+            // Pick one of three plant variants based on entity id hash
+            const variants = ['plant', 'plant2', 'plant3'];
+            const variant = variants[Math.abs(entity.id.split('').reduce((a,c) => a + c.charCodeAt(0), 0)) % 3];
+            this.ctx.drawImage(this.tiles.entities[variant], px, py, this.tileSize, this.tileSize);
+        } else if (entity.type === 'meat' && this.tilesLoaded) {
+            this.ctx.drawImage(this.tiles.entities['meat'], px, py, this.tileSize, this.tileSize);
+        } else if (entity.type === 'bones' && this.tilesLoaded) {
+            this.ctx.drawImage(this.tiles.entities['bones'], px, py, this.tileSize, this.tileSize);
         } else if (this.tilesLoaded && this.tiles.entities[entity.type]) {
-            // Use generic type sprite (rabbit, deer)
+            // Use generic type sprite (rabbit, deer, predators)
             this.ctx.drawImage(this.tiles.entities[entity.type], px, py, this.tileSize, this.tileSize);
             const predatorTypes = ['grizzly', 'black_bear', 'grey_wolf', 'dark_wolf'];
             if (predatorTypes.includes(entity.type)) this.renderHealthBar(entity, px, py);
         } else {
-            const colors = {
-                'agent': '#4fc3f7',
-                'rabbit': '#ffeb3b',
-                'deer': '#ff9800',
-                'plant': '#4caf50', // Green for plants
-                'meat': '#d32f2f', // Red for meat/corpses
-                'bones': '#9e9e9e', // Gray for bones
-            };
-            
-            const cx = px + this.tileSize / 2;
-            const cy = py + this.tileSize / 2;
-            
-            // Different rendering for different entity types
-            if (entity.type === 'plant') {
-                // Draw plant as a small green circle (shrub/bush)
-                this.ctx.fillStyle = colors['plant'];
-                this.ctx.beginPath();
-                this.ctx.arc(cx, cy, this.tileSize / 4, 0, Math.PI * 2);
-                this.ctx.fill();
-                
-                // Add a darker outline
-                this.ctx.strokeStyle = '#2e7d32';
-                this.ctx.lineWidth = 1;
-                this.ctx.stroke();
-            } else if (entity.type === 'meat') {
-                // Draw meat as a red blob
-                this.ctx.fillStyle = colors['meat'];
-                this.ctx.fillRect(px + 4, py + 4, this.tileSize - 8, this.tileSize - 8);
-                
-                // Darker outline
-                this.ctx.strokeStyle = '#b71c1c';
-                this.ctx.lineWidth = 1;
-                this.ctx.strokeRect(px + 4, py + 4, this.tileSize - 8, this.tileSize - 8);
-            } else if (entity.type === 'bones') {
-                // Draw bones as gray X pattern
-                this.ctx.strokeStyle = colors['bones'];
-                this.ctx.lineWidth = 2;
-                this.ctx.beginPath();
-                this.ctx.moveTo(px + 4, py + 4);
-                this.ctx.lineTo(px + this.tileSize - 4, py + this.tileSize - 4);
-                this.ctx.moveTo(px + this.tileSize - 4, py + 4);
-                this.ctx.lineTo(px + 4, py + this.tileSize - 4);
-                this.ctx.stroke();
-            } else {
-                // Regular entity rendering
-                this.ctx.fillStyle = colors[entity.type] || '#fff';
-                this.ctx.beginPath();
-                this.ctx.arc(cx, cy, this.tileSize / 3, 0, Math.PI * 2);
-                this.ctx.fill();
-                
-                // Draw a debug square around entity
-                this.ctx.strokeStyle = '#ff0000';
-                this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(px, py, this.tileSize, this.tileSize);
-            }
+            // Fallback: coloured circle
+            const colors = { 'agent': '#4fc3f7', 'rabbit': '#ffeb3b', 'deer': '#ff9800' };
+            this.ctx.fillStyle = colors[entity.type] || '#fff';
+            this.ctx.beginPath();
+            this.ctx.arc(px + this.tileSize/2, py + this.tileSize/2, this.tileSize/3, 0, Math.PI*2);
+            this.ctx.fill();
         }
         
-        if (entity.hp !== undefined) {
-            const maxHp = entity.maxHp || 100; // Use entity's maxHp if available, default 100
-            this.renderHealthBar(px + this.tileSize / 2, py + 2, entity.hp, maxHp);
-        }
     }
     
     renderHealthBar(entity, px, py) {

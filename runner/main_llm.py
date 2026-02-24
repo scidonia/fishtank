@@ -34,12 +34,14 @@ class LLMAgentRunner:
         use_mock_llm: bool = False,
         debug_prompts: bool = False,
         starting_prompt: Optional[str] = None,
+        avatar: Optional[str] = None,
     ):
         self.config = config
         self.server_url = server_url
         self.use_mock_llm = use_mock_llm
         self.debug_prompts = debug_prompts
         self.starting_prompt = starting_prompt
+        self.avatar = avatar
 
         self.memory = AgentMemory()
         self.base_prompt = get_base_prompt(config)
@@ -78,6 +80,7 @@ class LLMAgentRunner:
             # Use longer timeout for SSE stream (None = no timeout on reads)
             timeout = httpx.Timeout(10.0, read=None)
             async with httpx.AsyncClient(timeout=timeout) as client:
+                await self.register(client)
                 await self.subscribe_to_observations(client)
         except KeyboardInterrupt:
             console.print("\n[yellow]Agent stopped by user[/yellow]")
@@ -86,6 +89,19 @@ class LLMAgentRunner:
             raise
         finally:
             self.running = False
+
+    async def register(self, client: httpx.AsyncClient) -> None:
+        """Register this agent with the world server, spawning it into the world."""
+        url = f"{self.server_url}/register"
+        payload = {"agent_id": self.config.agent_id, "avatar": self.avatar}
+        try:
+            response = await client.post(url, json=payload, timeout=5.0)
+            result = response.json()
+            status = result.get("status", "unknown")
+            console.print(f"[green]✓ Registered with world server ({status})[/green]")
+        except Exception as e:
+            error_console.print(f"Registration failed: {e}")
+            raise
 
     async def subscribe_to_observations(self, client: httpx.AsyncClient) -> None:
         """Subscribe to agent observation stream via SSE."""
@@ -117,6 +133,13 @@ class LLMAgentRunner:
                     if event_type == "obs":
                         observation = json.loads(data)
                         await self.handle_observation(client, observation)
+                    elif event_type == "reset":
+                        console.print(
+                            "[yellow]🔄 World reset - re-registering...[/yellow]"
+                        )
+                        self.memory = AgentMemory()
+                        self.turn_count = 0
+                        await self.register(client)
 
     async def handle_observation(
         self, client: httpx.AsyncClient, obs: Dict[str, Any]
@@ -397,6 +420,7 @@ def main(
     use_mock: bool = False,
     debug_prompts: bool = False,
     starting_prompt: Optional[str] = None,
+    avatar: Optional[str] = None,
 ) -> None:
     """
     Run a Fish Tank agent with LLM-powered decision making.
@@ -428,7 +452,7 @@ def main(
 
     config = AgentConfig.from_personality(agent_id, personality_enum)
     runner = LLMAgentRunner(
-        config, server_url, use_mock, debug_prompts, starting_prompt
+        config, server_url, use_mock, debug_prompts, starting_prompt, avatar
     )
 
     try:

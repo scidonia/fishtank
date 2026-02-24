@@ -243,7 +243,7 @@ ACTIONS AVAILABLE:
 4. give {{"target_id": "agent_id", "item_index": 0}} - Give inventory item to adjacent agent (index optional, defaults to 0)
 5. attack {{"target_id": "agent_id"}} - Deal ~10 damage to adjacent entity
 6. talk {{"message": "text"}} - Broadcast message (heard within 10 tiles, max 200 chars)
-7. mate {{"partner_id": "agent_id"}} - Create offspring with adjacent agent (costs 20 energy each)
+7. mate {{"partner_id": "agent_id"}} - Create offspring with adjacent agent
 8. edit_prompt {{"text": "your goals/identity"}} - Update your persistent prompt (always visible, max 300 chars)
 9. edit_notes {{"text": "private info"}} - Write private notes (only visible with read_notes, max 1000 chars)
 10. read_notes {{}} - Read your private notes

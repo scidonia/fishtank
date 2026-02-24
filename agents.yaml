@@ -1,44 +1,66 @@
-# Fish Tank Default Agent Configuration
-# Match the 10 agents spawned by the server
+# Fish Tank Agent Configuration
+# Names are neutral to avoid seeding LLM behaviour.
+# Avatar field maps to the sprite in viewer/tiles/entities/
 
-use_mock: false  # Set to true to use mock LLM (no API key needed)
-# max_turns: 100  # Optional: end run after N turns (uncomment to enable)
+use_mock: false
 
 agents:
-  # Aggressive agents - seek to dominate and attack
-  - id: hunter
-    personality: aggressive
-    avatar: hunter.png
-  
-  - id: seeker
-    personality: aggressive
-  
-  - id: explorer
-    personality: aggressive
-  
-  - id: warden
-    personality: aggressive
+  - id: Ren
+    avatar: scout.png
+
+  - id: Kas
+    avatar: nomad.png
+
+  - id: Miro
     avatar: warden.png
-  
-  # Explorer agents - curious and adventurous
-  - id: scout
-    personality: explorer
-  
-  - id: nomad
-    personality: explorer
-  
-  # Cooperative agents - help others and share resources
-  - id: builder
-    personality: cooperative
-  
-  - id: gatherer
-    personality: cooperative
-  
-  # Survivor agent - practical and focused on staying alive
-  - id: ranger
-    personality: survivor
+
+  - id: Tev
+    avatar: seeker.png
+
+  - id: Osa
     avatar: ranger.png
-  
-  # Cautious agent - avoid risks and scout carefully
-  - id: guardian
-    personality: cautious
+
+  - id: Fen
+    avatar: guardian.png
+
+  - id: Dala
+    avatar: explorer.png
+
+  - id: Vor
+    avatar: hunter.png
+
+  - id: Kin
+    avatar: gatherer.png
+
+  - id: Brek
+    avatar: builder.png
+
+  - id: Syla
+    avatar: shaman.png
+
+  - id: Dorn
+    avatar: rogue.png
+
+  - id: Itha
+    avatar: merchant.png
+
+  - id: Vel
+    avatar: herbalist.png
+
+  - id: Prax
+    avatar: berserker.png
+
+  - id: Orin
+    avatar: witch.png
+
+  - id: Zek
+    avatar: monk.png
+
+  - id: Tal
+    avatar: bard.png
+
+  - id: Mev
+    avatar: alchemist.png
+
+  - id: Cael
+    avatar: assassin.png

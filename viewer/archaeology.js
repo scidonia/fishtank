@@ -80,6 +80,10 @@ async function loadRuns() {
                         <span class="stat-label">Explored:</span>
                         <span class="stat-value">${run.tiles_explored} tiles</span>
                     </div>
+                    <div class="stat">
+                        <span class="stat-label">Mate cost:</span>
+                        <span class="stat-value">${run.mating_cost ?? '?'} energy</span>
+                    </div>
                 </div>
                 <div class="run-time">
                     <div>Started: ${formatTimestamp(run.start_time)}</div>
