@@ -1,423 +1,227 @@
-# Fish Tank - Agentic World Simulation
+# Fish Tank — Agentic World Simulation
 
 **[Live Demo](https://fishtank.scidonia.ai)** | **[Blog Post: The Danger of AI — The Evolutionary Imperative](https://scidonia.ai/blog/the-danger-of-ai-the-evolutionary-imperative/)**
 
-An agent-based simulation environment where LLM-powered agents operate in a turn-based world rendered with DCSS-style tiles in the browser.
+An agent-based survival simulation where LLM-powered agents (DeepSeek v3) live, fight, eat, reproduce, and die in a 1000×1000 tile world — rendered live in the browser. Users can watch, read AI-generated narration, and bet on who survives.
 
-**Features:**
-- 🗺️ Large 1000×1000 tile world with procedural dungeons
-- 🎮 Real-time viewport rendering with camera controls
-- 🤖 LLM-ready agent framework (currently random walk)
-- 📡 SSE streaming for real-time updates
-- 🎨 Authentic DCSS tile graphics
-- 📊 Surveillance panel for monitoring agents
+## Features
+
+- **LLM agents** — Each agent runs DeepSeek v3, receives a structured observation (FOV map, inventory, nearby entities, memory), and decides actions as JSON
+- **Survival mechanics** — Combat, foraging, eating, giving items, energy/HP regeneration, starvation death
+- **Reproduction** — Agents can mate; offspring inherit fused prompts and auto-spawn as new LLM processes
+- **Persistent identity** — Agents have a persistent prompt and private notes they can read/edit each turn
+- **Memory system** — Agents remember visited locations, known agents, food sources, danger zones, and recent events
+- **Predator AI** — Wolves and bears hunt agents using scent-based tracking; deer and rabbits roam as prey
+- **Narrator** — A separate LLM process watches the world and generates dramatic turn-by-turn narration
+- **Betting** — Auth0-authenticated users can bet on agent survival; payouts are lineage-aware
+- **Archaeology** — Full run history browser: browse past rounds, deaths, events, agent lifespans
+- **Live viewer** — Browser-based renderer with camera controls, FOV overlay, surveillance panel, agent log, narrator feed
+- **NixOS deployment** — Production-ready NixOS module included
 
 ## Architecture
 
-See [fish_tank_architecture_spec_v1.md](./fish_tank_architecture_spec_v1.md) for the complete specification.
-
-### Components
-
-- **`server/`** - Node.js world server (authoritative, turn-based, SSE)
-- **`runner/`** - Python agent runner (DeepSeek v3 ready)
-- **`viewer/`** - Browser-based live viewer with viewport (SSE client)
-- **`shared/`** - Contract definitions and map data
+```
+fishtank/
+├── server/                  # Node.js world server (authoritative, turn-based, SSE)
+│   └── src/
+│       ├── index.js         # Express app, all API + SSE endpoints
+│       ├── world.js         # World simulation, turn loop, all game logic
+│       ├── worldLogger.js   # SQLite persistence (runs, events, bets, deaths)
+│       ├── worldSummarizer.js
+│       └── narrator.js      # Narrator broadcast logic
+├── runner/                  # Python agent processes
+│   ├── main_llm.py          # LLM agent runner (DeepSeek v3)
+│   ├── agent.py             # AgentPersonality, AgentMemory, prompt building
+│   ├── llm.py               # LLM provider abstraction (DeepSeek + mock)
+│   ├── launcher.py          # Multi-agent launcher + birth watcher
+│   ├── narrator_agent.py    # Narrator process (watches SSE, generates narration)
+│   └── main.py              # Legacy random-walk runner (for testing)
+├── viewer/                  # Browser-based live viewer
+│   ├── index.html           # Main viewer (world, actions, archaeology tabs)
+│   ├── betting.html         # Betting UI (Auth0 login, agent cards, leaderboard)
+│   ├── viewer.js            # Canvas renderer, viewport, FOV overlay
+│   ├── betting.js           # Betting logic, odds calculation
+│   ├── archaeology.js       # Run history browser
+│   └── config.js            # Runtime config (server URL, Auth0 — overridden at deploy)
+├── shared/
+│   ├── map.txt              # 1000×1000 ASCII map
+│   ├── generate_map.py      # Map generator
+│   └── schemas.json         # Protocol contracts
+├── nixos-modules/
+│   └── fishtank-server.nix  # NixOS module for production deployment
+├── agents.yaml              # Agent roster (names, avatars, optional starting prompts)
+├── env/                     # Environment config structure
+├── flake.nix                # Nix flake (dev shell + deployment packages)
+└── pyproject.toml           # Python package (agent-llm, fishtank-launcher, fishtank-narrator)
+```
 
 ## Quick Start
 
 ### Prerequisites
 
 - Node.js 18+
-- Python 3.12+
-- uv (Python package manager)
+- Python 3.12+ with [uv](https://docs.astral.sh/uv/)
+- DeepSeek API key (get one at [platform.deepseek.com](https://platform.deepseek.com))
 
-### One-Command Demo
-
-```bash
-./start-demo.sh
-```
-
-This will:
-1. Start the world server on port 3000 (loads 1000×1000 map)
-2. Start the viewer HTTP server on port 8080
-3. Display instructions for running agents
-
-**Then:**
-1. Open http://localhost:8080 in your browser
-2. Click **"Connect"** button
-3. You'll see the large map with 2 agents spawned
-
-### Running Agents
-
-In **separate terminals**, start agents:
+### 1. Start the world server
 
 ```bash
-# Agent 1
-uv run agent --agent-id scout
-
-# Agent 2
-uv run agent --agent-id nomad
+cd server && npm install && npm start
 ```
 
-Watch them move around in the viewer!
+Server runs on `http://localhost:3000`.
 
-## How to Use the Viewer
+### 2. Open the viewer
 
-### Camera Controls
-
-**Mouse:**
-- **Click & Drag** - Pan the camera around the large map
-- **Hover over entities** - See tooltips with stats
-
-**Keyboard:**
-- **Arrow Keys** - Move the camera
-- **+/- Buttons** - Zoom in/out
-
-**Agent Tracking:**
-- Click **"Follow Agent"** button to auto-track the first agent
-- Click any agent in the **Surveillance Panel** to follow them
-- Camera will smoothly follow the selected agent
-- Click **"Follow Agent"** again (now shows "Free Camera") to stop following
-
-### Surveillance Panel
-
-The right sidebar shows:
-- **World Stats** - Turn number, agent count, map size, camera position
-- **Surveillance** - List of all agents with:
-  - Agent ID
-  - Position (x, y)
-  - HP and Hunger
-  - Click any agent to follow them
-- **Event Log** - Recent world events (combat, deaths, etc.)
-
-### Tips
-
-- The map is **1000×1000 tiles** - use camera controls to explore!
-- Only the **visible viewport** is rendered for performance
-- Agents have **limited hunger** and will starve if they don't eat
-- Watch agents **wander randomly** through the dungeon rooms
-
-## Manual Setup
-
-If you prefer to start components individually:
-
-### 1. Install Dependencies
+Open `viewer/index.html` directly in your browser, or serve it:
 
 ```bash
-# Server dependencies
-cd server && npm install && cd ..
-
-# Python agent dependencies
-uv sync
+cd viewer && python -m http.server 8080
+# then open http://localhost:8080
 ```
 
-### 2. Start the World Server
+The viewer auto-connects to `http://localhost:3000`.
+
+### 3. Start agents
 
 ```bash
-cd server
-npm start
+export DEEPSEEK_API_KEY="sk-..."
+
+# Start a single agent
+uv run agent-llm --agent-id Scout
+
+# Or start a full fleet from a config file
+uv run fishtank-launcher --config agents.yaml --server-url http://localhost:3000
 ```
 
-Server runs on `http://localhost:3000` and loads the map from `shared/map.txt`
+The launcher reads `agents.yaml`, spawns all agents as separate processes, and watches for newborns to auto-spawn child processes.
 
-You should see:
-```
-✓ Loaded map from shared/map.txt: 1000 rows × 1000 columns
-🐠 Fish Tank Server running on http://localhost:3000
-```
-
-### 3. Start the Viewer
+### 4. Start the narrator (optional)
 
 ```bash
-cd viewer
-python -m http.server 8080
+uv run fishtank-narrator --server-url http://localhost:3000
 ```
 
-Then open http://localhost:8080 and click **"Connect"**
-
-### 4. Start Agent Runners
-
-In separate terminals:
+### Testing without an API key
 
 ```bash
-# Agent 1
-uv run agent --agent-id scout
-
-# Agent 2
-uv run agent --agent-id nomad
-
-# You can add more agents (they'll spawn in random valid locations)
-uv run agent --agent-id a3
+uv run agent-llm --agent-id Scout --use-mock
 ```
 
-Each agent will:
-- Connect to the server via SSE
-- Receive observations each turn
-- Make decisions (currently random walk)
-- Submit actions via HTTP POST
+## Agent Config (`agents.yaml`)
 
-## Map Generation
-
-The world uses a **1000×1000 tile map** stored in `shared/map.txt`.
-
-### Regenerating the Map
-
-To create a new map layout:
-
-```bash
-cd shared
-python3 generate_map.py
+```yaml
+agents:
+  - id: Scout
+    avatar: scout.png
+  - id: Ranger
+    avatar: ranger.png
+    starting_prompt: "I protect the weak and avoid unnecessary conflict."
 ```
 
-This generates a procedural dungeon with:
-- 50 randomly sized rooms (10-40 tiles each)
-- Corridors connecting all rooms
-- Random pillars for variety
-- ~6% floor space, ~94% walls
+Each agent self-registers with the server when it starts. No agents are pre-spawned.
 
-The map is deterministic based on the seed (default 42).
+## Actions
 
-## Development
+Agents submit a JSON action each turn:
 
-See [DEVELOPMENT_CHECKLIST.md](./DEVELOPMENT_CHECKLIST.md) for implementation progress.
+```json
+{ "action": "move", "args": { "dir": "NE" }, "reasoning": "..." }
+```
 
-See [CONVENTIONS.md](./CONVENTIONS.md) for Python coding standards.
+Available actions:
 
-See [WHERE_WE_ARE.txt](./WHERE_WE_ARE.txt) for quick status overview.
+| Action | Args | Description |
+|---|---|---|
+| `move` | `dir`: N/S/E/W/NE/NW/SE/SW | Move one tile |
+| `wait` | — | Do nothing |
+| `attack` | `target_id` | Attack an adjacent entity |
+| `forage` | — | Pick up food from current tile |
+| `eat` | `item_index` | Eat an item from inventory |
+| `give` | `target_id`, `item_index` | Give item to adjacent agent |
+| `mate` | `target_id` | Attempt to mate with adjacent agent |
+| `edit_prompt` | `prompt` | Update persistent identity prompt |
+| `edit_notes` | `notes` | Update private notes |
+| `read_prompt` | — | Read own persistent prompt |
+| `read_notes` | — | Read own private notes |
 
 ## API Endpoints
 
 ### SSE Streams
 
-**Public Stream** - For viewers
-```
-GET http://localhost:3000/stream/public
-```
-Events:
-- `snapshot` - Full world state on connect
-- `delta` - Incremental updates each turn
-- `public` - Combat logs, deaths, spawns
+| Endpoint | Description |
+|---|---|
+| `GET /stream/public` | World snapshots + deltas + events (for viewer) |
+| `GET /stream/agent?agent_id=<id>` | Per-turn observation for an agent |
+| `GET /stream/surveillance?agent_id=<id>` | Agent telemetry + prompt/notes updates (for viewer) |
 
-**Agent Stream** - For agent runners
-```
-GET http://localhost:3000/stream/agent?agent_id=<id>
-```
-Events:
-- `obs` - Private observation for this turn
+### Agent API
 
-### Action Submission
+| Endpoint | Description |
+|---|---|
+| `POST /register` | Agent self-registration and spawn |
+| `POST /act` | Submit an action for the current turn |
+| `POST /telemetry` | Post per-turn telemetry event |
+| `POST /narrate` | Post narrator text for broadcast |
 
-**Submit Action**
-```
-POST http://localhost:3000/act
-Content-Type: application/json
-```
+### World Control
 
-Request body:
-```json
-{
-  "agent_id": "scout",
-  "turn_id": 1842,
-  "type": "move",
-  "args": { "dir": "NW" }
-}
-```
+| Endpoint | Description |
+|---|---|
+| `GET /health` | `{ status, turn, paused }` |
+| `POST /pause` | Pause the world |
+| `POST /resume` | Resume the world |
+| `POST /reset` | End current round and start a new one |
 
-Response:
-```json
-{ "ok": true }
-```
+### Archaeology
 
-Or on error:
-```json
-{ "ok": false, "error": "Invalid turn_id" }
-```
+| Endpoint | Description |
+|---|---|
+| `GET /api/runs` | List all past runs |
+| `GET /api/runs/:runId` | Events + agent lifespans for a run |
 
-**Available Actions:**
-- `move` - Move in 8 directions: N, S, E, W, NE, NW, SE, SW
-- `wait` - Do nothing this turn
-- More actions coming: `attack`, `forage`, `eat`, `talk`
+### Betting (Auth0 required for write endpoints)
 
-### Health Check
+| Endpoint | Description |
+|---|---|
+| `GET /api/betting/current` | Current run info + alive agents + odds |
+| `POST /api/betting/bet` | Place a bet on an agent |
+| `GET /api/betting/mybets` | Your bets for the current run |
+| `GET /api/betting/history` | Your full bet history |
+| `GET /api/betting/leaderboard` | Public leaderboard |
+| `GET /api/user` | Your profile + points balance |
 
-```
-GET http://localhost:3000/health
-```
+## Deployment (NixOS)
 
-Returns:
-```json
-{ "status": "ok", "turn": 42 }
-```
+A NixOS module is provided in `nixos-modules/fishtank-server.nix`:
 
-## Project Structure
-
-```
-fishtank/
-├── server/              # Node.js world server
-│   ├── src/
-│   │   ├── index.js    # Express app + SSE endpoints
-│   │   └── world.js    # World simulation + turn loop
-│   └── package.json
-├── runner/              # Python agent runner
-│   ├── main.py         # CLI + SSE client + decision loop
-│   └── __init__.py
-├── viewer/              # Browser viewer
-│   ├── index.html      # UI layout
-│   ├── style.css       # Styling
-│   ├── viewer.js       # Canvas renderer with viewport
-│   └── tiles/          # DCSS tile assets
-│       ├── floor/      # Floor tile variants
-│       ├── wall/       # Wall tile variants
-│       └── entities/   # Agent/creature sprites
-├── shared/              # Shared resources
-│   ├── map.txt         # 1000×1000 ASCII map (978KB)
-│   ├── generate_map.py # Map generator script
-│   └── schemas.json    # Protocol contracts
-├── start-demo.sh        # Quick start script
-├── README.md            # This file
-├── QUICKSTART.md        # User guide
-├── STATUS.md            # Comprehensive status
-├── WHERE_WE_ARE.txt     # Quick reference
-└── DEVELOPMENT_CHECKLIST.md  # Implementation tracker
+```nix
+services.fishtank-server = {
+  enable = true;
+  src = inputs.fishtank;
+  npmDepsHash = "sha256-...";
+  port = 3000;
+  auth0 = {
+    domain = "your-tenant.eu.auth0.com";
+    clientId = "your-client-id";
+  };
+  nginx.serverName = "fishtank.example.com";
+  environmentFile = config.sops.secrets."fishtank.env".path;
+  agentsConfig = "${inputs.fishtank}/agents.yaml";
+  runnerPackage = inputs.fishtank.packages.${pkgs.system}.fishtank-runner;
+};
 ```
 
-## Troubleshooting
-
-### Ports Already in Use
-
-If you get "Address already in use" errors, run the cleanup script:
-
-```bash
-./stop-all.sh
-```
-
-This will kill all Fish Tank processes and free ports 3000 and 8080.
-
-**Manual cleanup:**
-```bash
-# Kill by process
-pkill -f "node src/index.js"
-pkill -f "python -m http.server 8080"
-
-# Kill by port (more aggressive)
-lsof -ti:3000 | xargs kill -9
-lsof -ti:8080 | xargs kill -9
-```
-
-### Server Won't Start
-
-**Check if ports are in use:**
-```bash
-lsof -i:3000  # World server
-lsof -i:8080  # Viewer server
-```
-
-**Check server logs:**
-```bash
-tail -f /tmp/fishtank-server.log
-```
-
-### Viewer Not Connecting
-
-1. **Verify server is running:**
-   ```bash
-   curl http://localhost:3000/health
-   # Should return: {"status":"ok","turn":...}
-   ```
-
-2. **Check browser console** (F12) for errors
-
-3. **Try refreshing the page** after clicking Connect
-
-4. **Check viewer logs:**
-   ```bash
-   tail -f /tmp/fishtank-viewer.log
-   ```
-
-### Agent Not Receiving Observations
-
-- **Verify agent_id matches spawned agents** (scout, nomad, warden are pre-spawned)
-- **Check server logs** for connection messages
-- **Check network requests** in agent terminal output
-- **Verify server is running** on port 3000
-
-### Tiles Not Loading
-
-- **Verify tiles exist:**
-  ```bash
-  ls viewer/tiles/floor/
-  ls viewer/tiles/wall/
-  ls viewer/tiles/entities/
-  ```
-- **Check browser console** for 404 errors
-- Tiles were copied from DCSS Nov-2015 tileset
-
-### Performance Issues
-
-The viewport system should provide smooth 60 FPS even with 1000×1000 maps:
-
-- **Only visible tiles are rendered** (viewport culling)
-- **Try zooming in** to reduce visible area
-- **Check browser performance** tab (F12) for bottlenecks
-- **Reduce agent count** if running many agents
-
-### Map Not Loading
-
-If server says "Falling back to generated map":
-
-```bash
-# Verify map file exists
-ls -lh shared/map.txt
-
-# Regenerate if needed
-cd shared
-python3 generate_map.py
-cd ..
-```
-
-### Common Issues
-
-**"Cannot find module" (Node.js)**
-```bash
-cd server
-npm install
-```
-
-**"Command not found: uv" (Python)**
-```bash
-# Install uv first
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-**"Module not found" (Python)**
-```bash
-uv sync
-```
-
-## What's Next
-
-Current status: **MVP complete with large map support** (65% done)
-
-**Coming soon:**
-- ⏳ Combat system (attack action)
-- ⏳ Food/items (forage, eat actions)
-- ⏳ Line-of-sight visibility
-- ⏳ LLM integration (DeepSeek v3)
-- ⏳ Agent memory system
-- ⏳ Determinism tests
-
-See [DEVELOPMENT_CHECKLIST.md](./DEVELOPMENT_CHECKLIST.md) for details.
+The module creates `fishtank-server` and `fishtank-launcher` systemd services, generates `config.js` with the correct Auth0 credentials, and sets up nginx.
 
 ## Contributing
 
-Follow [CONVENTIONS.md](./CONVENTIONS.md) for Python coding standards.
+See [CONVENTIONS.md](./CONVENTIONS.md) for coding standards.
 
-Key principles:
-- World server is authoritative
-- All state changes go through turn loop
-- Use SSE for server → client
-- Use HTTP POST for client → server
-- Maintain determinism
+Core principles:
+- World server is authoritative — all state changes go through the turn loop
+- SSE for server → client; HTTP POST for client → server
+- Agents are stateless between processes; all persistent state lives in the server
 
 ## License
 
