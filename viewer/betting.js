@@ -15,7 +15,8 @@ let metaInterval = null;
 // ── Entry point (called once when Betting tab is first opened) ─────────────────
 
 async function initBetting() {
-    if (typeof auth0 === 'undefined') {
+    const auth0Available = await window._auth0Promise;
+    if (!auth0Available) {
         const el = document.getElementById('loading');
         if (el) el.innerHTML = '<p style="color:#aaa;padding:2rem">Betting requires a secure (HTTPS) connection.</p>';
         return;
