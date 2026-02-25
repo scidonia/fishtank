@@ -28,11 +28,16 @@ class WorldViewer {
         this.tilesLoaded = false;
         this.loadTiles();
         
+        this.reconnectTimer = null;
+
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
         
         this.setupEventListeners();
         this.startRenderLoop();
+
+        // Auto-connect immediately on load
+        this.connect();
     }
     
     resizeCanvas() {
@@ -96,14 +101,7 @@ class WorldViewer {
     }
     
     setupEventListeners() {
-        // Connection
-        document.getElementById('connect-btn').addEventListener('click', () => {
-            if (this.eventSource) {
-                this.disconnect();
-            } else {
-                this.connect();
-            }
-        });
+        // (connection is automatic — no connect button)
         
         // Mouse controls for panning
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
@@ -229,16 +227,40 @@ class WorldViewer {
         this.eventSource.onopen = () => {
             console.log('SSE connection opened');
             this.updateConnectionStatus(true);
+            // Show pause button once connected
+            const btn = document.getElementById('pause-btn');
+            if (btn) btn.style.display = 'inline-block';
         };
         
-        this.eventSource.onerror = (err) => {
-            console.error('SSE connection error:', err);
+        this.eventSource.addEventListener('paused', () => {
+            if (typeof setWorldPaused === 'function') setWorldPaused(true);
+        });
+        this.eventSource.addEventListener('resumed', () => {
+            if (typeof setWorldPaused === 'function') setWorldPaused(false);
+        });
+
+        this.eventSource.onerror = () => {
             this.updateConnectionStatus(false);
-            this.disconnect();
+            const btn = document.getElementById('pause-btn');
+            if (btn) btn.style.display = 'none';
+            if (this.eventSource) {
+                this.eventSource.close();
+                this.eventSource = null;
+            }
+            if (!this.reconnectTimer) {
+                this.reconnectTimer = setTimeout(() => {
+                    this.reconnectTimer = null;
+                    this.connect();
+                }, 3000);
+            }
         };
     }
     
-    disconnect() {
+    disconnect(cancelReconnect = false) {
+        if (cancelReconnect && this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         if (this.eventSource) {
             this.eventSource.close();
             this.eventSource = null;
@@ -256,16 +278,12 @@ class WorldViewer {
     
     updateConnectionStatus(connected) {
         const status = document.getElementById('status');
-        const btn = document.getElementById('connect-btn');
-        
         if (connected) {
             status.textContent = 'Connected';
             status.classList.add('connected');
-            btn.textContent = 'Disconnect';
         } else {
-            status.textContent = 'Disconnected';
+            status.textContent = this.reconnectTimer ? 'Reconnecting...' : 'Disconnected';
             status.classList.remove('connected');
-            btn.textContent = 'Connect';
         }
     }
     
@@ -273,6 +291,7 @@ class WorldViewer {
         console.log('Snapshot received:', data.map?.length, 'x', data.map?.[0]?.length);
         console.log('Entities:', data.entities?.length);
         this.worldState = data;
+        if (typeof setWorldPaused === 'function') setWorldPaused(!!data.paused);
         
         // Center camera on first agent
         if (data.entities && data.entities.length > 0) {

@@ -14,10 +14,11 @@
                 <button class="tab-btn active" onclick="switchTab('world')">World</button>
                 <button class="tab-btn" onclick="switchTab('actions')">Actions</button>
                 <button class="tab-btn" onclick="switchTab('archaeology')">Archaeology</button>
+                <a href="betting.html" class="tab-btn">Betting</a>
             </div>
             <div class="connection-status">
                 <span id="status">Disconnected</span>
-                <button id="connect-btn">Connect</button>
+                <button id="pause-btn" onclick="togglePause()" style="display:none">⏸ Pause</button>
             </div>
         </header>
         
@@ -166,7 +167,7 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{}</code>
                     </div>
-                    <p class="action-description">Collect adjacent food (plant or meat) and add it to your inventory. Does not consume immediately.</p>
+                    <p class="action-description">Pick up the nearest food item (plant or meat) within 1 tile and add it to your inventory. Does not consume immediately — use <code>eat</code> to gain energy.</p>
                 </div>
                 
                 <div class="action-card">
@@ -174,7 +175,7 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{}</code>
                     </div>
-                    <p class="action-description">Consume the first item from your inventory to gain energy. Plants give +20 energy, meat varies (+30-100).</p>
+                    <p class="action-description">Consume the first item from your inventory to gain its stored energy (capped at 100 total). You must forage first.</p>
                 </div>
                 
                 <div class="action-card">
@@ -182,15 +183,15 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{"target_id": "agent_id", "item_index": 0}</code>
                     </div>
-                    <p class="action-description">Give an inventory item to an adjacent agent. item_index is optional (defaults to 0 = first item).</p>
+                    <p class="action-description">Give an inventory item to an adjacent agent. <code>item_index</code> is optional (defaults to 0 = first item).</p>
                 </div>
                 
                 <div class="action-card">
                     <h3>attack</h3>
                     <div class="action-args">
-                        <strong>Args:</strong> <code>{"target_id": "agent_id"}</code>
+                        <strong>Args:</strong> <code>{"target_id": "entity_id"}</code>
                     </div>
-                    <p class="action-description">Deal ~10 damage to an adjacent entity. Can attack agents, rabbits (20 HP), or deer (80 HP). Dead entities become forageable meat.</p>
+                    <p class="action-description">Deal damage (base 10 ± variance) to an adjacent entity. Targets: agents, rabbits, deer, grizzly, black_bear, grey_wolf, dark_wolf. Dead animals become forageable meat.</p>
                 </div>
                 
                 <div class="action-card">
@@ -198,7 +199,7 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{"message": "text"}</code>
                     </div>
-                    <p class="action-description">Broadcast a message that can be heard by all agents within 10 tiles.</p>
+                    <p class="action-description">Broadcast a message heard by all agents within 10 tiles. Max 200 characters.</p>
                 </div>
                 
                 <div class="action-card">
@@ -206,7 +207,7 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{"partner_id": "agent_id"}</code>
                     </div>
-                    <p class="action-description">Create offspring with an adjacent agent. Costs 20 energy for each parent. Offspring inherits combined traits.</p>
+                    <p class="action-description">Create offspring with an adjacent agent. Energy cost is configurable (default 0). Child inherits a fused version of both parents' prompts.</p>
                 </div>
                 
                 <div class="action-card">
@@ -214,7 +215,7 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{"text": "your goals/identity"}</code>
                     </div>
-                    <p class="action-description">Update your persistent prompt. This text is shown in every observation and should contain your personality, goals, and strategies.</p>
+                    <p class="action-description">Update your persistent prompt shown in every observation. Max 300 characters. Use it to store your identity, goals, and strategies.</p>
                 </div>
                 
                 <div class="action-card">
@@ -222,7 +223,7 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{"text": "private info"}</code>
                     </div>
-                    <p class="action-description">Write private notes. Only visible when you use read_notes. Use for detailed observations and information.</p>
+                    <p class="action-description">Overwrite your private notes (max 1000 characters). Notes are hidden until you use <code>read_notes</code>. Good for detailed observations.</p>
                 </div>
                 
                 <div class="action-card">
@@ -230,7 +231,7 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{}</code>
                     </div>
-                    <p class="action-description">Read your private notes to recall detailed information you've written.</p>
+                    <p class="action-description">Read your private notes — returned in your next observation as the action result.</p>
                 </div>
                 
                 <div class="action-card">
@@ -238,7 +239,7 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{}</code>
                     </div>
-                    <p class="action-description">Read your current persistent prompt to review your goals.</p>
+                    <p class="action-description">Read your current persistent prompt — returned in your next observation as the action result.</p>
                 </div>
                 
                 <div class="action-card">
@@ -246,7 +247,7 @@
                     <div class="action-args">
                         <strong>Args:</strong> <code>{}</code>
                     </div>
-                    <p class="action-description">Do nothing this turn. Useful for conserving resources or observing the situation.</p>
+                    <p class="action-description">Do nothing this turn. Any unrecognised action also falls back to wait.</p>
                 </div>
             </div>
         </div>
@@ -260,13 +261,13 @@
             if (tabName === 'world') {
                 document.getElementById('world-tab').style.display = 'grid';
                 document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                if (typeof viewer !== 'undefined') viewer.resizeCanvas();
             } else if (tabName === 'actions') {
                 document.getElementById('actions-tab').style.display = 'block';
                 document.querySelectorAll('.tab-btn')[1].classList.add('active');
             } else if (tabName === 'archaeology') {
                 document.getElementById('archaeology-tab').style.display = 'block';
                 document.querySelectorAll('.tab-btn')[2].classList.add('active');
-                // Initialize archaeology viewer on first view
                 if (typeof window.archaeologyInitialized === 'undefined') {
                     window.archaeologyInitialized = true;
                     initArchaeology();
@@ -280,7 +281,10 @@
             const icon = header.querySelector('.collapse-icon');
             
             if (content.style.display === 'none') {
-                content.style.display = 'block';
+                // Use flex for sections that need it (agent-log-panel, narrator-panel)
+                const needsFlex = section.classList.contains('agent-log-panel') ||
+                                  section.classList.contains('narrator-panel');
+                content.style.display = needsFlex ? 'flex' : 'block';
                 icon.textContent = '▼';
                 section.classList.remove('collapsed');
             } else {
@@ -290,7 +294,31 @@
             }
         }
     </script>
-    <script src="viewer.js"></script>
-    <script src="archaeology.js"></script>
+    <script src="viewer.js?v=3"></script>
+    <script src="archaeology.js?v=2"></script>
+    <script>
+        // Pause/resume
+        let _worldPaused = false;
+
+        async function togglePause() {
+            const endpoint = _worldPaused ? '/resume' : '/pause';
+            const res = await fetch('http://localhost:3000' + endpoint, { method: 'POST' });
+            const data = await res.json();
+            setWorldPaused(data.paused);
+        }
+
+        function setWorldPaused(paused) {
+            _worldPaused = paused;
+            const btn = document.getElementById('pause-btn');
+            if (btn) {
+                btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+                btn.style.background = paused ? '#1b5e20' : '';
+            }
+        }
+
+        // Handle ?tab= param after all scripts are loaded
+        const _tab = new URLSearchParams(window.location.search).get('tab');
+        if (_tab) switchTab(_tab);
+    </script>
 </body>
 </html>

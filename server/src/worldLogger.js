@@ -25,6 +25,7 @@ export class WorldLogger {
         this.db = new Database(dbPath);
         
         this.initDatabase();
+        this.closeStaleRuns();
         this.createRun();
         
         console.log(`✓ World Logger initialized: ${this.runId}`);
@@ -84,6 +85,32 @@ export class WorldLogger {
             
             CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id, turn);
             CREATE INDEX IF NOT EXISTS idx_agents_run ON agent_lifespans(run_id);
+
+            CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,   -- Auth0 sub (e.g. "auth0|abc123")
+                display_name TEXT,
+                email TEXT,
+                points INTEGER NOT NULL DEFAULT 100,
+                created_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS bets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                agent_id TEXT NOT NULL,          -- the agent being bet on
+                amount INTEGER NOT NULL,
+                competitor_count INTEGER NOT NULL, -- alive agents when bet was placed
+                placed_at INTEGER NOT NULL,
+                resolved_at INTEGER,
+                won INTEGER,                      -- 1 = won, 0 = lost, NULL = pending
+                payout INTEGER,
+                FOREIGN KEY (user_id) REFERENCES users(user_id),
+                FOREIGN KEY (run_id) REFERENCES runs(run_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_bets_run ON bets(run_id);
+            CREATE INDEX IF NOT EXISTS idx_bets_user ON bets(user_id);
         `);
 
         // Migrate: add mating_cost column if missing (for existing DBs)
@@ -93,6 +120,16 @@ export class WorldLogger {
         }
     }
     
+    closeStaleRuns() {
+        // Close any runs left open by a previous crash
+        const result = this.db.prepare(
+            `UPDATE runs SET end_time = ? WHERE end_time IS NULL`
+        ).run(Date.now());
+        if (result.changes > 0) {
+            console.log(`⚠️  Closed ${result.changes} stale run(s) from previous crash`);
+        }
+    }
+
     createRun() {
         const stmt = this.db.prepare(`
             INSERT INTO runs (run_id, start_time)
@@ -269,6 +306,102 @@ export class WorldLogger {
         return stmt.all(runId || this.runId);
     }
     
+    // ── User management ──────────────────────────────────────────────────────
+
+    upsertUser(userId, displayName, email) {
+        const existing = this.db.prepare(`SELECT user_id FROM users WHERE user_id = ?`).get(userId);
+        if (existing) {
+            this.db.prepare(`UPDATE users SET display_name = ?, email = ? WHERE user_id = ?`)
+                .run(displayName, email, userId);
+        } else {
+            this.db.prepare(`INSERT INTO users (user_id, display_name, email, points, created_at) VALUES (?, ?, ?, 100, ?)`)
+                .run(userId, displayName, email, Date.now());
+        }
+        return this.db.prepare(`SELECT * FROM users WHERE user_id = ?`).get(userId);
+    }
+
+    getUser(userId) {
+        return this.db.prepare(`SELECT * FROM users WHERE user_id = ?`).get(userId);
+    }
+
+    // ── Betting ───────────────────────────────────────────────────────────────
+
+    placeBet(userId, runId, agentId, amount, competitorCount) {
+        const user = this.getUser(userId);
+        if (!user) throw new Error('User not found');
+        if (user.points < amount) throw new Error('Insufficient points');
+        if (amount < 1) throw new Error('Bet amount must be at least 1');
+
+        // Check user hasn't already bet on this agent in this run
+        const existing = this.db.prepare(
+            `SELECT id FROM bets WHERE user_id = ? AND run_id = ? AND agent_id = ?`
+        ).get(userId, runId, agentId);
+        if (existing) throw new Error('Already bet on this agent in this run');
+
+        this.db.prepare(`UPDATE users SET points = points - ? WHERE user_id = ?`).run(amount, userId);
+        const result = this.db.prepare(`
+            INSERT INTO bets (user_id, run_id, agent_id, amount, competitor_count, placed_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(userId, runId, agentId, amount, competitorCount, Date.now());
+
+        return { betId: result.lastInsertRowid, pointsRemaining: user.points - amount };
+    }
+
+    getBetsForRun(runId) {
+        return this.db.prepare(`SELECT * FROM bets WHERE run_id = ?`).all(runId);
+    }
+
+    getUserBetsForRun(userId, runId) {
+        return this.db.prepare(`SELECT * FROM bets WHERE user_id = ? AND run_id = ?`).all(userId, runId);
+    }
+
+    getUserBets(userId) {
+        return this.db.prepare(`
+            SELECT b.*, r.start_time, r.end_time, r.total_turns
+            FROM bets b
+            JOIN runs r ON b.run_id = r.run_id
+            WHERE b.user_id = ?
+            ORDER BY b.placed_at DESC
+        `).all(userId);
+    }
+
+    /**
+     * Resolve all pending bets for a run.
+     * winningLineage: Set of agent IDs that are winners (survivors + their descendants).
+     * Payout = amount * competitorCount (the odds when the bet was placed).
+     */
+    resolveBets(runId, winningLineage) {
+        const bets = this.db.prepare(`SELECT * FROM bets WHERE run_id = ? AND resolved_at IS NULL`).all(runId);
+        const now = Date.now();
+
+        for (const bet of bets) {
+            const won = winningLineage.has(bet.agent_id) ? 1 : 0;
+            const payout = won ? bet.amount * bet.competitor_count : 0;
+
+            this.db.prepare(`
+                UPDATE bets SET resolved_at = ?, won = ?, payout = ? WHERE id = ?
+            `).run(now, won, payout, bet.id);
+
+            if (won && payout > 0) {
+                this.db.prepare(`UPDATE users SET points = points + ? WHERE user_id = ?`)
+                    .run(payout, bet.user_id);
+            }
+        }
+
+        return bets.length;
+    }
+
+    getLeaderboard() {
+        return this.db.prepare(`
+            SELECT user_id, display_name, points,
+                   (SELECT COUNT(*) FROM bets WHERE user_id = u.user_id AND won = 1) as wins,
+                   (SELECT COUNT(*) FROM bets WHERE user_id = u.user_id AND resolved_at IS NOT NULL) as total_bets
+            FROM users u
+            ORDER BY points DESC
+            LIMIT 50
+        `).all();
+    }
+
     close() {
         this.db.close();
     }

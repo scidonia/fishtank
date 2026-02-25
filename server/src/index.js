@@ -1,5 +1,7 @@
 import express from 'express';
 import { WorldServer } from './world.js';
+import jwt from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -8,14 +10,14 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
 });
 
 // Initialize world server with large map
-const MAX_TURNS = process.env.MAX_TURNS ? parseInt(process.env.MAX_TURNS) : null;
+const MAX_TURNS = process.env.MAX_TURNS ? parseInt(process.env.MAX_TURNS) : 1000;
 const MATING_COST = process.env.MATING_COST !== undefined ? parseInt(process.env.MATING_COST, 10) : 0;
 const world = new WorldServer({ 
     seed: 42, 
@@ -23,6 +25,39 @@ const world = new WorldServer({
     maxTurns: MAX_TURNS,
     matingCost: MATING_COST,
 });
+
+// Auth0 JWT verification
+const AUTH0_DOMAIN = 'your-tenant.eu.auth0.com';
+const AUTH0_AUDIENCE = `https://${AUTH0_DOMAIN}/api/v2/`;
+
+const jwks = jwksClient({
+    jwksUri: `https://${AUTH0_DOMAIN}/.well-known/jwks.json`,
+    cache: true,
+    rateLimit: true,
+});
+
+function getKey(header, callback) {
+    jwks.getSigningKey(header.kid, (err, key) => {
+        if (err) return callback(err);
+        callback(null, key.getPublicKey());
+    });
+}
+
+function requireAuth(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing token' });
+    }
+    const token = authHeader.slice(7);
+    jwt.verify(token, getKey, {
+        algorithms: ['RS256'],
+        issuer: `https://${AUTH0_DOMAIN}/`,
+    }, (err, decoded) => {
+        if (err) return res.status(401).json({ error: 'Invalid token', detail: err.message });
+        req.user = decoded;
+        next();
+    });
+}
 
 if (MAX_TURNS) {
     console.log(`⏰ Run will end after ${MAX_TURNS} turns`);
@@ -149,7 +184,17 @@ app.get('/stream/surveillance', (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', turn: world.turnId });
+    res.json({ status: 'ok', turn: world.turnId, paused: world.paused });
+});
+
+app.post('/pause', (req, res) => {
+    world.pause();
+    res.json({ ok: true, paused: true, turn: world.turnId });
+});
+
+app.post('/resume', (req, res) => {
+    world.resume();
+    res.json({ ok: true, paused: false, turn: world.turnId });
 });
 
 // Force end the current round and start a new one
@@ -201,6 +246,113 @@ app.get('/api/runs/:runId', (req, res) => {
     }
 });
 
+// ── Betting API ───────────────────────────────────────────────────────────────
+
+// Upsert user on login (called by frontend after Auth0 login)
+app.post('/api/user', requireAuth, (req, res) => {
+    try {
+        const userId = req.user.sub;
+        const displayName = req.body.display_name || req.user.name || req.user.email || userId;
+        const email = req.user.email || req.body.email || null;
+        const user = world.logger.upsertUser(userId, displayName, email);
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get current user profile + points
+app.get('/api/user', requireAuth, (req, res) => {
+    try {
+        const user = world.logger.getUser(req.user.sub);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get current run info + alive agents (for betting UI)
+app.get('/api/betting/current', (req, res) => {
+    try {
+        const snapshot = world.getSnapshot();
+        const aliveAgents = snapshot.entities
+            .filter(e => e.type === 'agent')
+            .map(e => ({
+                id: e.id,
+                avatar: e.avatar,
+                generation: e.generation,
+                parents: e.parents,
+                hp: e.hp,
+                energy: e.energy,
+                prompt: e.prompt || '',
+                inventory: (e.inventory || []).length,
+                pos: e.pos,
+            }));
+        res.json({
+            run_id: world.logger.runId,
+            turn: world.turnId,
+            alive_count: aliveAgents.length,
+            agents: aliveAgents,
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Place a bet
+app.post('/api/betting/bet', requireAuth, (req, res) => {
+    try {
+        const { agent_id, amount } = req.body;
+        if (!agent_id || !amount) return res.status(400).json({ error: 'agent_id and amount required' });
+
+        const snapshot = world.getSnapshot();
+        const aliveCount = snapshot.entities.filter(e => e.type === 'agent').length;
+        const agentExists = snapshot.entities.some(e => e.id === agent_id && e.type === 'agent');
+        if (!agentExists) return res.status(400).json({ error: 'Agent not found in current run' });
+
+        const result = world.logger.placeBet(
+            req.user.sub,
+            world.logger.runId,
+            agent_id,
+            parseInt(amount),
+            aliveCount
+        );
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// Get user's bets for current run
+app.get('/api/betting/mybets', requireAuth, (req, res) => {
+    try {
+        const bets = world.logger.getUserBetsForRun(req.user.sub, world.logger.runId);
+        res.json(bets);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get user's full bet history
+app.get('/api/betting/history', requireAuth, (req, res) => {
+    try {
+        const bets = world.logger.getUserBets(req.user.sub);
+        res.json(bets);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Leaderboard (public)
+app.get('/api/betting/leaderboard', (req, res) => {
+    try {
+        res.json(world.logger.getLeaderboard());
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`🐠 Fish Tank Server running on http://localhost:${PORT}`);
     console.log(`   Public stream:     http://localhost:${PORT}/stream/public`);
@@ -229,3 +381,14 @@ async function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[UNHANDLED REJECTION]', reason);
+    // Don't exit — log and continue. Most rejections are recoverable (network, LLM).
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('[UNCAUGHT EXCEPTION]', err);
+    // Exit — unknown state, better to restart cleanly.
+    process.exit(1);
+});

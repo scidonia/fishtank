@@ -5,6 +5,12 @@ import { dirname, join } from 'path';
 import axios from 'axios';
 import { WorldLogger } from './worldLogger.js';
 
+// Strip a leading "I am <Name>." / "I am <Name>," opener so children don't inherit
+// a parent's self-identification verbatim.
+function stripNamePrefix(prompt) {
+    return prompt.replace(/^I am [^.,!?]+[.,]?\s*/i, '').trim();
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -17,6 +23,7 @@ export class WorldServer {
         this.maxTurns = maxTurns; // Optional turn limit (null = unlimited)
         this.matingCost = Math.max(0, parseInt(matingCost, 10) || 0);
         this.running = false;
+        this.paused = false;
         this.turnInterval = 1000; // ms per turn
         
         // Initialize world logger for persistence
@@ -76,8 +83,8 @@ export class WorldServer {
         this.plantGrowthRate = 1.0; // 100% chance per turn to spawn a new plant (always grow if under max)
         
         // Spawn animals
-        this.spawnAnimals(50, 15); // 50 rabbits, 15 deer (further reduced to balance food)
-        this.spawnPredators(5, 5); // 5 wolves, 5 bears
+        this.spawnAnimals(50, 15); // 50 rabbits, 15 deer
+        this.spawnPredators(8, 8); // 8 wolves, 8 bears
     }
     
     loadMapFromFile(filePath) {
@@ -376,12 +383,12 @@ export class WorldServer {
 
             if (this.map[y] && this.map[y][x] === '.') {
                 const occupied = this.entities.some(e => e.pos[0] === x && e.pos[1] === y);
-                // Keep predators 15-150 tiles away from agents at spawn
+                // Spawn predators 20-80 tiles from agents — close enough to find them
                 const tooClose = agentPositions.some(([ax, ay]) =>
-                    Math.abs(ax - x) < 15 && Math.abs(ay - y) < 15
+                    Math.abs(ax - x) < 20 && Math.abs(ay - y) < 20
                 );
                 const tooFar = agentPositions.length > 0 && !agentPositions.some(([ax, ay]) =>
-                    Math.abs(ax - x) < 150 && Math.abs(ay - y) < 150
+                    Math.abs(ax - x) < 80 && Math.abs(ay - y) < 80
                 );
 
                 if (!occupied && !tooClose && !tooFar) {
@@ -435,14 +442,36 @@ export class WorldServer {
         console.log(`✓ Agents registered, starting turn loop`);
 
         while (this.running) {
+            // Wait while paused
+            while (this.paused) {
+                await this.sleep(200);
+            }
             await this.executeTurn();
             await this.sleep(this.turnInterval);
+        }
+    }
+
+    pause() {
+        if (!this.paused) {
+            this.paused = true;
+            console.log('⏸️  World paused');
+            this.broadcastPublic({ type: 'paused', data: { turn: this.turnId } });
+        }
+    }
+
+    resume() {
+        if (this.paused) {
+            this.paused = false;
+            console.log('▶️  World resumed');
+            this.broadcastPublic({ type: 'resumed', data: { turn: this.turnId } });
         }
     }
     
     sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
+
+
     
     async executeTurn() {
         this.turnId++;
@@ -451,6 +480,7 @@ export class WorldServer {
         // Check if max turns reached
         if (this.maxTurns !== null && this.turnId > this.maxTurns) {
             console.log(`\n⏰ MAX TURNS REACHED (${this.maxTurns}) - Starting new round...`);
+            this.resolveBetsForCurrentRun();
             this.logger.endRun().then(async () => {
                 console.log('✓ Round ended due to turn limit, resetting world...');
                 await this.resetWorld();
@@ -550,6 +580,7 @@ export class WorldServer {
         const aliveAgents = this.entities.filter(e => e.type === 'agent' && e.hp > 0);
         if (aliveAgents.length === 0 && this.turnId > 1 && this.hadAgentsThisRound) {
             console.log('\n⚰️  ALL AGENTS DIED - Starting new round...');
+            this.resolveBetsForCurrentRun();
             this.logger.endRun().then(async () => {
                 console.log('✓ Round ended, resetting world...');
                 await this.resetWorld();
@@ -563,6 +594,86 @@ export class WorldServer {
         this.broadcastDelta();
     }
     
+    resolveBetsForCurrentRun() {
+        try {
+            const allAgents = this.entities.filter(e => e.type === 'agent');
+            const aliveAgents = allAgents.filter(e => e.hp > 0);
+
+            // Build a parent->children map for lineage traversal
+            const childrenOf = new Map(); // agentId -> [childId, ...]
+            for (const agent of allAgents) {
+                if (agent.parents) {
+                    for (const parentId of agent.parents) {
+                        if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
+                        childrenOf.get(parentId).push(agent.id);
+                    }
+                }
+            }
+
+            // Determine winners:
+            // If exactly one survivor → that agent wins
+            // Otherwise → agents with the most living descendants win
+            let winnerIds = new Set();
+
+            if (aliveAgents.length === 1) {
+                winnerIds.add(aliveAgents[0].id);
+            } else if (aliveAgents.length > 1) {
+                // Count living descendants (recursively) for each alive agent
+                const countDescendants = (agentId, visited = new Set()) => {
+                    if (visited.has(agentId)) return 0;
+                    visited.add(agentId);
+                    const children = childrenOf.get(agentId) || [];
+                    const aliveChildren = children.filter(cId =>
+                        aliveAgents.some(a => a.id === cId)
+                    );
+                    return aliveChildren.length + aliveChildren.reduce(
+                        (sum, cId) => sum + countDescendants(cId, visited), 0
+                    );
+                };
+                const scores = aliveAgents.map(a => ({
+                    id: a.id,
+                    score: countDescendants(a.id),
+                }));
+                const maxScore = Math.max(...scores.map(s => s.score));
+                winnerIds = new Set(scores.filter(s => s.score === maxScore).map(s => s.id));
+            }
+
+            // Expand winning set to include full lineage of each winner
+            // (a bet on an ancestor wins if any descendant is in winnerIds)
+            const bets = this.logger.getBetsForRun(this.logger.runId);
+            const bettedAgents = new Set(bets.map(b => b.agent_id));
+
+            // For each betted agent, walk its descendant tree — if any descendant is a winner,
+            // the betted agent is also a winner
+            const winningLineage = new Set(winnerIds);
+            const isWinningLineage = (agentId, visited = new Set()) => {
+                if (visited.has(agentId)) return false;
+                visited.add(agentId);
+                if (winnerIds.has(agentId)) return true;
+                const children = childrenOf.get(agentId) || [];
+                return children.some(cId => isWinningLineage(cId, visited));
+            };
+
+            for (const agentId of bettedAgents) {
+                if (isWinningLineage(agentId)) {
+                    winningLineage.add(agentId);
+                }
+            }
+
+            const resolved = this.logger.resolveBets(this.logger.runId, winningLineage);
+            console.log(`🎰 Resolved ${resolved} bets. Winners: ${[...winnerIds].join(', ') || 'none'}`);
+
+            // Broadcast resolution to all viewers
+            this.broadcastPublic({
+                type: 'bets_resolved',
+                winner_ids: [...winnerIds],
+                winning_lineage: [...winningLineage],
+            });
+        } catch (err) {
+            console.error('Error resolving bets:', err);
+        }
+    }
+
     async resetWorld() {
         console.log('\n🔄 Resetting world for new round...');
 
@@ -792,7 +903,28 @@ export class WorldServer {
                 if (bestDir) return { type: 'move', args: { dir: bestDir } };
             }
 
-            // Wander randomly
+            // Scent: 50% of the time, drift toward the nearest agent on the map
+            if (this.rng() < 0.5) {
+                const allAgents = this.entities.filter(e => e.type === 'agent' && e.hp > 0);
+                if (allAgents.length > 0) {
+                    const nearest = allAgents.reduce((best, a) => {
+                        const d = Math.sqrt((a.pos[0]-animalX)**2 + (a.pos[1]-animalY)**2);
+                        return d < best.d ? { a, d } : best;
+                    }, { a: null, d: Infinity }).a;
+                    if (nearest) {
+                        const [tx, ty] = nearest.pos;
+                        const bestDir = getWalkableDirs().sort((a, b) => {
+                            const [dxa, dya] = this.getDirDelta(a);
+                            const [dxb, dyb] = this.getDirDelta(b);
+                            return Math.sqrt((animalX+dxa-tx)**2 + (animalY+dya-ty)**2) -
+                                   Math.sqrt((animalX+dxb-tx)**2 + (animalY+dyb-ty)**2);
+                        })[0];
+                        if (bestDir) return { type: 'move', args: { dir: bestDir } };
+                    }
+                }
+            }
+
+            // Otherwise wander randomly
             const dirs = getWalkableDirs();
             if (dirs.length > 0) {
                 return { type: 'move', args: { dir: dirs[Math.floor(this.rng() * dirs.length)] } };
@@ -1748,55 +1880,49 @@ export class WorldServer {
     }
     
     async fusePrompts(prompt1, prompt2, childName = null) {
-        const namePrefix = childName ? `I am ${childName}. ` : '';
+        // If neither parent has a prompt, child starts blank — they'll define themselves
+        if (!prompt1 && !prompt2) return '';
 
-        // If neither parent has a prompt, return a basic self-identity prompt
-        if (!prompt1 && !prompt2) return childName ? `I am ${childName}, born into this world. Seek purpose through exploration and survival.` : '';
-        
-        // If only one parent has a prompt, personalise it for the child
-        if (!prompt1) return (namePrefix + prompt2).substring(0, 300);
-        if (!prompt2) return (namePrefix + prompt1).substring(0, 300);
-        
-        // Both parents have prompts - use LLM to intelligently fuse them
+        // If only one parent has a prompt, inherit it verbatim (names will be elided below)
+        const p1 = (prompt1 || '').trim();
+        const p2 = (prompt2 || '').trim();
+
+        // Single-parent case: just use the one prompt (strip any "I am X" opener)
+        if (!p1) return stripNamePrefix(p2).substring(0, 300);
+        if (!p2) return stripNamePrefix(p1).substring(0, 300);
+
+        // Both parents have prompts — use LLM to fuse them
         const apiKey = process.env.DEEPSEEK_API_KEY;
-        
-        // Fallback to simple fusion if no API key
+
+        // No API key: return empty so the child starts blank rather than with a bad string
         if (!apiKey) {
-            console.log('  No DEEPSEEK_API_KEY set, using simple prompt fusion');
-            return `${namePrefix}Born from two agents. Inherited mixed traits from both parents.`;
+            console.log('  No DEEPSEEK_API_KEY — child starts with no prompt');
+            return '';
         }
-        
+
         try {
-            const nameInstruction = childName
-                ? `6. Begin the prompt with "I am ${childName}." so the agent knows its own name`
-                : '';
-            const llmPrompt = `You are creating an inherited personality prompt for an offspring agent in a survival simulation.
+            const llmPrompt = `You are creating a starting prompt for an offspring agent in a survival simulation.
 
 PARENT 1 PROMPT:
-${prompt1}
+${p1}
 
 PARENT 2 PROMPT:
-${prompt2}
+${p2}
 
-TASK: Create a NEW prompt for their offspring that:
-1. Inherits the BEHAVIORAL THEMES (exploration, survival, cooperation, etc.) from both parents
-2. Does NOT copy specific names or partner references
-3. Generalizes the goals so the offspring can apply them to their own life
-4. Is concise and actionable
-5. MUST be 250 characters or less${nameInstruction ? '\n' + nameInstruction : ''}
+TASK: Write a single short prompt (max 250 characters) that blends the behavioural themes of both parents. Rules:
+- Remove all proper names (replace with "others", "those around me", etc.)
+- Write in first person ("I")
+- Focus only on behaviours and values, not specific goals tied to named individuals
+- Be concise — this is a seed, not a biography
 
-IMPORTANT: Do not reference parent names or specific individuals. Focus on behaviors and values.
-
-Respond with ONLY the fused prompt text, nothing else.`;
+Respond with ONLY the prompt text, nothing else.`;
 
             const response = await axios.post(
                 'https://api.deepseek.com/v1/chat/completions',
                 {
                     model: 'deepseek-chat',
-                    messages: [
-                        { role: 'user', content: llmPrompt }
-                    ],
-                    max_tokens: 150,
+                    messages: [{ role: 'user', content: llmPrompt }],
+                    max_tokens: 120,
                     temperature: 0.7,
                 },
                 {
@@ -1804,23 +1930,20 @@ Respond with ONLY the fused prompt text, nothing else.`;
                         'Authorization': `Bearer ${apiKey}`,
                         'Content-Type': 'application/json',
                     },
-                    timeout: 5000, // 5 second timeout
+                    timeout: 5000,
                 }
             );
-            
+
             let fusedPrompt = response.data.choices[0].message.content.trim();
-            
-            // Ensure character limit (300 max for agent prompts)
-            if (fusedPrompt.length > 300) {
-                fusedPrompt = fusedPrompt.substring(0, 297) + '...';
-            }
-            
-            console.log(`  🧬 LLM-fused prompt (${fusedPrompt.length} chars): "${fusedPrompt}"`);
+            if (fusedPrompt.length > 300) fusedPrompt = fusedPrompt.substring(0, 297) + '...';
+
+            console.log(`  🧬 Fused prompt for ${childName || 'child'} (${fusedPrompt.length} chars): "${fusedPrompt}"`);
             return fusedPrompt;
-            
+
         } catch (error) {
             console.error('  Failed to fuse prompts with LLM:', error.message);
-            return `${namePrefix}Born from two agents. Seek purpose through exploration and survival.`;
+            // Fall back to empty — child starts fresh rather than with a nonsense string
+            return '';
         }
     }
     
@@ -2045,6 +2168,7 @@ Respond with ONLY the name, nothing else.`;
     getSnapshot() {
         return {
             turn_id: this.turnId,
+            paused: this.paused,
             map: this.map,
             entities: this.entities,
         };
