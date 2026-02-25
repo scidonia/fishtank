@@ -286,10 +286,18 @@ in
             proxyPass = "http://127.0.0.1:${toString cfg.port}";
           };
 
-          # HTML files: never cache so updates are always picked up immediately
-          "~* \\.html$" = {
+          # HTML and config.js: never cache so updates are always picked up immediately
+          "~* \\.(html)$" = {
             root = "${viewerPackage}";
             tryFiles = "$uri =404";
+            extraConfig = ''
+              expires -1;
+              add_header Cache-Control "no-store, no-cache, must-revalidate";
+            '';
+          };
+
+          "= /config.js" = {
+            root = "${viewerPackage}";
             extraConfig = ''
               expires -1;
               add_header Cache-Control "no-store, no-cache, must-revalidate";
