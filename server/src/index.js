@@ -19,15 +19,19 @@ app.use((req, res, next) => {
 // Initialize world server with large map
 const MAX_TURNS = process.env.MAX_TURNS ? parseInt(process.env.MAX_TURNS) : 1000;
 const MATING_COST = process.env.MATING_COST !== undefined ? parseInt(process.env.MATING_COST, 10) : 0;
+// MAP_FILE lets deployments supply an absolute path to the map, so the server
+// can run from a read-only Nix store path while the map lives in the package.
+const MAP_FILE = process.env.MAP_FILE || 'shared/map.txt';
 const world = new WorldServer({ 
     seed: 42, 
-    mapFile: 'shared/map.txt',
+    mapFile: MAP_FILE,
     maxTurns: MAX_TURNS,
     matingCost: MATING_COST,
 });
 
 // Auth0 JWT verification
-const AUTH0_DOMAIN = 'your-tenant.eu.auth0.com';
+const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN;
+if (!AUTH0_DOMAIN) throw new Error('AUTH0_DOMAIN environment variable is required');
 const AUTH0_AUDIENCE = `https://${AUTH0_DOMAIN}/api/v2/`;
 
 const jwks = jwksClient({

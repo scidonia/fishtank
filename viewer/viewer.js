@@ -1,5 +1,5 @@
 // Fish Tank Viewer - SSE Client with Viewport
-const SERVER_URL = 'http://localhost:3000';
+const SERVER_URL = window.FISHTANK_CONFIG?.serverUrl || '';
 
 class WorldViewer {
     constructor() {

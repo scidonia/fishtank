@@ -13,8 +13,11 @@ export class WorldLogger {
         this.runId = runId || this.generateRunId();
         this.summarizer = new WorldSummarizer();
         
-        // Ensure data directory exists
-        const dataDir = join(__dirname, '..', '..', 'data');
+        // Ensure data directory exists.
+        // DATA_DIR env var lets deployments redirect the SQLite DB to a
+        // writable state directory (e.g. /var/lib/fishtank) without needing
+        // write access to the Nix store package path.
+        const dataDir = process.env.DATA_DIR || join(__dirname, '..', '..', 'data');
         try {
             mkdirSync(dataDir, { recursive: true });
         } catch (err) {

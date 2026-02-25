@@ -75,9 +75,20 @@
           };
           uvpart = {
             workspaceRoot = ./.;
-            extraPackages = [ pkgs.hello ];
+            extraPackages = [
+              pkgs.openssl
+              pkgs.sops
+              pkgs.age
+              pkgs.nodejs
+            ];
             uv = inputs'.uv2nix.packages.uv-bin;
+            shellHook = ''
+              source ${./scripts/dev-shell-hook.sh}
+            '';
           };
         };
+      flake = {
+        nixosModules.fishtank-server = import ./nixos-modules/fishtank-server.nix;
+      };
     };
 }

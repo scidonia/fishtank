@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fish Tank — Betting</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.auth0.com/js/auth0-spa-js/2.0/auth0-spa-js.production.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #0a0e1a;
+            color: #c8d8e8;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+        }
+
+        #auth-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.85rem;
+        }
+
+        #user-info { color: #a0c4e8; }
+
+        button.primary {
+            background: #0d47a1;
+            border-color: #1565c0;
+            color: #e3f2fd;
+        }
+        button.primary:hover { background: #1565c0; }
+
+        main {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px 16px;
+        }
+
+        #login-prompt {
+            text-align: center;
+            padding: 80px 20px;
+        }
+
+        #login-prompt h2 { color: #4fc3f7; margin-bottom: 12px; font-size: 1.4rem; }
+        #login-prompt p { color: #7cb9e8; margin-bottom: 24px; }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        /* Points banner */
+        #points-banner {
+            background: #111827;
+            border: 1px solid #1e3a5f;
+            border-radius: 4px;
+            padding: 14px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        #points-banner .label { color: #7cb9e8; font-size: 0.85rem; }
+        #points-banner .value { color: #ffd54f; font-size: 1.6rem; font-weight: bold; }
+        #points-banner .run-info { color: #4a7a9b; font-size: 0.8rem; text-align: right; }
+
+        /* Agents grid */
+        #agents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .agent-card {
+            background: #111827;
+            border: 1px solid #1e3a5f;
+            border-radius: 4px;
+            padding: 14px;
+            transition: border-color 0.2s;
+            position: relative;
+        }
+
+        .agent-card:hover { border-color: #2a6090; }
+        .agent-card.already-bet { border-color: #1b5e20; background: #0d1f0d; }
+        .agent-card.selected { border-color: #4fc3f7; }
+
+        .agent-card .avatar-wrap {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 10px;
+            background: #0a0e1a;
+            border: 1px solid #1e3a5f;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .agent-card .avatar-wrap img {
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        .agent-card .agent-name {
+            text-align: center;
+            color: #e0f0ff;
+            font-size: 0.95rem;
+            margin-bottom: 4px;
+        }
+
+        .agent-card .agent-meta {
+            text-align: center;
+            color: #4a7a9b;
+            font-size: 0.75rem;
+            margin-bottom: 10px;
+        }
+
+        .agent-card .odds {
+            text-align: center;
+            color: #ffd54f;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+        }
+
+        .agent-card .agent-bars {
+            margin: 6px 0 4px;
+        }
+
+        .agent-card .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 3px;
+        }
+
+        .agent-card .bar-label {
+            color: #4a7a9b;
+            font-size: 0.7rem;
+            width: 18px;
+            flex-shrink: 0;
+        }
+
+        .agent-card .bar-track {
+            flex: 1;
+            height: 5px;
+            background: #0a0e1a;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .agent-card .bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
+        .agent-card .bar-val {
+            color: #7cb9e8;
+            font-size: 0.7rem;
+            width: 24px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .agent-card .agent-inv {
+            color: #4a7a9b;
+            font-size: 0.72rem;
+            margin-bottom: 6px;
+            text-align: center;
+        }
+
+        .agent-card .agent-prompt {
+            font-size: 0.72rem;
+            color: #8aabbc;
+            border-left: 2px solid #1e3a5f;
+            padding: 4px 6px;
+            margin: 6px 0;
+            line-height: 1.4;
+            max-height: 60px;
+            overflow-y: auto;
+            word-break: break-word;
+        }
+
+        .agent-card .agent-prompt.no-prompt {
+            color: #3a5a6b;
+            font-style: italic;
+        }
+
+        .agent-card .bet-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #1b5e20;
+            color: #a5d6a7;
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 2px;
+        }
+
+        .bet-form {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .bet-form input[type=number] {
+            flex: 1;
+            background: #0a0e1a;
+            border: 1px solid #1e3a5f;
+            color: #c8d8e8;
+            padding: 5px 8px;
+            font-family: inherit;
+            font-size: 0.85rem;
+            border-radius: 3px;
+            width: 0;
+        }
+
+        .bet-form input[type=number]:focus {
+            outline: none;
+            border-color: #4fc3f7;
+        }
+
+        /* Bet history table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        th {
+            color: #4fc3f7;
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid #1e3a5f;
+            font-weight: normal;
+            letter-spacing: 1px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #0f1c2e;
+            color: #a0b8c8;
+        }
+
+        tr:hover td { background: #0d1825; }
+
+        .won { color: #a5d6a7; }
+        .lost { color: #ef9a9a; }
+        .pending { color: #ffd54f; }
+
+        /* Leaderboard */
+        .leaderboard-row {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px;
+            border-bottom: 1px solid #0f1c2e;
+            gap: 14px;
+        }
+
+        .leaderboard-row:hover { background: #0d1825; }
+
+        .rank { color: #4a7a9b; width: 28px; font-size: 0.85rem; }
+        .lb-name { flex: 1; color: #c8d8e8; }
+        .lb-points { color: #ffd54f; font-size: 1rem; }
+        .lb-record { color: #4a7a9b; font-size: 0.75rem; }
+
+        .me .lb-name { color: #4fc3f7; }
+
+        /* Status messages */
+        .msg {
+            padding: 10px 14px;
+            border-radius: 3px;
+            margin-bottom: 14px;
+            font-size: 0.85rem;
+        }
+        .msg.error { background: #3e1212; border: 1px solid #7b1a1a; color: #ef9a9a; }
+        .msg.success { background: #0d2e0d; border: 1px solid #1b5e20; color: #a5d6a7; }
+        .msg.info { background: #0d1e35; border: 1px solid #1e3a5f; color: #7cb9e8; }
+
+        #status-msg { margin-bottom: 16px; }
+
+        .section-title {
+            color: #4fc3f7;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 14px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #1e3a5f;
+        }
+
+        #loading { color: #4a7a9b; padding: 40px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="tabs">
+        <a href="index.html" class="tab-btn">World</a>
+        <a href="index.html?tab=actions" class="tab-btn">Actions</a>
+        <a href="index.html?tab=archaeology" class="tab-btn">Archaeology</a>
+        <a href="betting.html" class="tab-btn active">Betting</a>
+    </div>
+    <div id="auth-bar">
+        <span id="user-info"></span>
+        <button id="login-btn" onclick="bettingLogin()">Log In</button>
+        <button id="logout-btn" onclick="bettingLogout()" style="display:none">Log Out</button>
+    </div>
+</header>
+
+<main>
+    <div id="loading">Initialising...</div>
+
+    <div id="login-prompt" style="display:none">
+        <h2>Place Your Bets</h2>
+        <p>Log in to bet on survivors. Points pay out proportional to how many competitors were alive when you bet.</p>
+        <button class="primary" onclick="bettingLogin()" style="padding:10px 32px;font-size:1rem;">Log In with Auth0</button>
+    </div>
+
+    <div id="app" style="display:none">
+        <div id="points-banner">
+            <div>
+                <div class="label">Your Points</div>
+                <div class="value" id="points-display">—</div>
+            </div>
+            <div class="run-info" id="run-info">Loading run info...</div>
+        </div>
+
+        <div id="status-msg"></div>
+
+        <div class="tabs" style="margin-bottom:24px">
+            <button class="tab-btn active" onclick="switchTab('bet')">Place Bets</button>
+            <button class="tab-btn" onclick="switchTab('history')">My History</button>
+            <button class="tab-btn" onclick="switchTab('leaderboard')">Leaderboard</button>
+        </div>
+
+        <!-- Bet tab -->
+        <div id="tab-bet" class="panel active">
+            <div class="section-title">Current Survivors</div>
+            <div id="agents-grid"></div>
+        </div>
+
+        <!-- History tab -->
+        <div id="tab-history" class="panel">
+            <div class="section-title">Your Bet History</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Run</th>
+                        <th>Agent</th>
+                        <th>Amount</th>
+                        <th>Competitors</th>
+                        <th>Potential</th>
+                        <th>Result</th>
+                        <th>Payout</th>
+                    </tr>
+                </thead>
+                <tbody id="history-tbody"></tbody>
+            </table>
+        </div>
+
+        <!-- Leaderboard tab -->
+        <div id="tab-leaderboard" class="panel">
+            <div class="section-title">Leaderboard</div>
+            <div id="leaderboard-list"></div>
+        </div>
+    </div>
+</main>
+
+<script src="config.js"></script>
+<script src="betting.js"></script>
+</body>
+</html>

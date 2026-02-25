@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fish Tank - World Viewer</title>
     <link rel="stylesheet" href="style.css">
+    <script src="config.js"></script>
 </head>
 <body>
     <div class="container">
@@ -302,7 +303,8 @@
 
         async function togglePause() {
             const endpoint = _worldPaused ? '/resume' : '/pause';
-            const res = await fetch('http://localhost:3000' + endpoint, { method: 'POST' });
+            const base = window.FISHTANK_CONFIG?.serverUrl || '';
+            const res = await fetch(base + endpoint, { method: 'POST' });
             const data = await res.json();
             setWorldPaused(data.paused);
         }
