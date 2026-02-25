@@ -259,6 +259,14 @@ in
         forceSSL = cfg.nginx.enableSSL;
         enableACME = cfg.nginx.enableSSL;
 
+        extraConfig = ''
+          # Redirect to HTTPS when the client-facing connection was plain HTTP.
+          # Cloudflare sets X-Forwarded-Proto; direct port-80 traffic has no header.
+          if ($http_x_forwarded_proto = "http") {
+            return 301 https://$host$request_uri;
+          }
+        '';
+
         locations = {
           # SSE streams: disable buffering, long read timeout
           "~ ^/stream/" = {
