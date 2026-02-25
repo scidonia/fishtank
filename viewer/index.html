@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fish Tank - World Viewer</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="style.css">
     <script src="config.js"></script>
 </head>
@@ -19,7 +20,7 @@
             </div>
             <div class="connection-status">
                 <span id="status">Disconnected</span>
-                <button id="pause-btn" onclick="togglePause()" style="display:none">⏸ Pause</button>
+
             </div>
         </header>
         
@@ -298,26 +299,6 @@
     <script src="viewer.js?v=3"></script>
     <script src="archaeology.js?v=2"></script>
     <script>
-        // Pause/resume
-        let _worldPaused = false;
-
-        async function togglePause() {
-            const endpoint = _worldPaused ? '/resume' : '/pause';
-            const base = window.FISHTANK_CONFIG?.serverUrl || '';
-            const res = await fetch(base + endpoint, { method: 'POST' });
-            const data = await res.json();
-            setWorldPaused(data.paused);
-        }
-
-        function setWorldPaused(paused) {
-            _worldPaused = paused;
-            const btn = document.getElementById('pause-btn');
-            if (btn) {
-                btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
-                btn.style.background = paused ? '#1b5e20' : '';
-            }
-        }
-
         // Handle ?tab= param after all scripts are loaded
         const _tab = new URLSearchParams(window.location.search).get('tab');
         if (_tab) switchTab(_tab);

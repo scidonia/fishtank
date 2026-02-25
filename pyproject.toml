@@ -23,6 +23,6 @@ packages = ["runner"]
 
 [project.scripts]
 agent = "runner.main:main"
-agent-llm = "runner.main_llm:main"
+agent-llm = "runner.main_llm:app"
 fishtank-launcher = "runner.launcher:main"
 fishtank-narrator = "runner.narrator_agent:main"
