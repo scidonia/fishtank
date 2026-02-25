@@ -11,7 +11,7 @@ let
   # correct Auth0 credentials and server URL for each environment.
   viewerConfig = pkgs.writeText "fishtank-config.js" ''
     window.FISHTANK_CONFIG = {
-      serverUrl: '',
+      serverUrl: '''',
       auth0Domain: '${cfg.auth0.domain}',
       auth0ClientId: '${cfg.auth0.clientId}',
     };
@@ -214,7 +214,7 @@ in
             proxyPass = "http://127.0.0.1:${toString cfg.port}";
             extraConfig = ''
               proxy_http_version 1.1;
-              proxy_set_header Connection '';
+              proxy_set_header Connection '''';
               proxy_buffering off;
               proxy_cache off;
               proxy_read_timeout 3600s;
