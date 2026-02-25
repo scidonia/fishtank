@@ -212,6 +212,42 @@ in
         };
     };
 
+    systemd.services.fishtank-narrator = lib.mkIf (cfg.runnerPackage != null) {
+      description = "Fish Tank narrator agent";
+      after = [ "fishtank-server.service" ];
+      wants = [ "fishtank-server.service" ];
+      wantedBy = [ "multi-user.target" ];
+
+      # Wait for the world server before connecting.
+      preStart = ''
+        echo "Waiting for world server on port ${toString cfg.port}..."
+        for i in $(seq 1 30); do
+          if ${pkgs.curl}/bin/curl -sf http://127.0.0.1:${toString cfg.port}/health > /dev/null 2>&1; then
+            echo "World server is ready."
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "World server did not become ready in time." >&2
+        exit 1
+      '';
+
+      serviceConfig =
+        {
+          User = cfg.user;
+          Group = cfg.group;
+          ExecStart = "${cfg.runnerPackage}/bin/fishtank-narrator --server-url http://127.0.0.1:${toString cfg.port}";
+          Restart = "always";
+          RestartSec = 5;
+          NoNewPrivileges = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+        }
+        // lib.optionalAttrs (cfg.environmentFile != null) {
+          EnvironmentFile = cfg.environmentFile;
+        };
+    };
+
     systemd.services.fishtank-launcher = lib.mkIf (cfg.agentsConfig != null) {
       description = "Fish Tank agent launcher";
       after = [ "fishtank-server.service" ];

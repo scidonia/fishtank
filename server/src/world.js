@@ -703,6 +703,11 @@ export class WorldServer {
             });
         });
 
+        // Also broadcast reset on public stream so the narrator and viewers can react
+        this.publicClients.forEach(callback => {
+            callback({ type: 'reset', data: { message: 'World reset - new round starting' } });
+        });
+
         // Clear all entities
         this.entities = [];
         this.actionQueue = new Map();

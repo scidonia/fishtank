@@ -539,17 +539,14 @@ h2 {
 }
 
 .tab-btn.blog-link {
-    background: #e65100;
-    color: #1a1a1a;
-    border-color: #e65100;
-    font-weight: bold;
-    font-size: 16px;
-    padding: 8px 24px;
+    border-color: #81d4fa;
+    opacity: 0.85;
 }
 
 .tab-btn.blog-link:hover {
-    background: #ff6d00;
-    border-color: #ff6d00;
+    opacity: 1;
+    border-color: #4fc3f7;
+    background: #2a2a2a;
 }
 
 .tab-content {
