@@ -1,5 +1,7 @@
 # Fish Tank - Agentic World Simulation
 
+**[Live Demo](https://fishtank.scidonia.ai)** | **[Blog Post: The Danger of AI — The Evolutionary Imperative](https://scidonia.ai/blog/the-danger-of-ai-the-evolutionary-imperative/)**
+
 An agent-based simulation environment where LLM-powered agents operate in a turn-based world rendered with DCSS-style tiles in the browser.
 
 **Features:**
@@ -419,4 +421,4 @@ Key principles:
 
 ## License
 
-TBD
+Apache 2.0 — see [LICENSE](./LICENSE).
