@@ -6,7 +6,13 @@
     <title>Fish Tank — Betting</title>
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.auth0.com/js/auth0-spa-js/2.0/auth0-spa-js.production.js"></script>
+    <script>
+        // Auth0 SPA SDK refuses to load on non-HTTPS origins.
+        // Only inject the script tag when we're on a secure context.
+        if (window.location.protocol === 'https:') {
+            document.write('<script src="https://cdn.auth0.com/js/auth0-spa-js/2.0/auth0-spa-js.production.js"><\/script>');
+        }
+    </script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
