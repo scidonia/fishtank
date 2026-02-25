@@ -15,9 +15,10 @@ let metaInterval = null;
 // ── Entry point (called once when Betting tab is first opened) ─────────────────
 
 async function initBetting() {
-    if (window.location.protocol !== 'https:') {
-        document.getElementById('betting-root').innerHTML =
-            '<p style="color:#aaa;padding:2rem">Betting requires a secure (HTTPS) connection.</p>';
+    const auth0Available = await window._auth0Ready;
+    if (!auth0Available) {
+        const el = document.getElementById('loading');
+        if (el) el.innerHTML = '<p style="color:#aaa;padding:2rem">Betting requires a secure (HTTPS) connection.</p>';
         return;
     }
     auth0Client = await auth0.createAuth0Client({
@@ -260,6 +261,21 @@ function entityToAgent(e) {
     };
 }
 
+// ── Bayesian odds ─────────────────────────────────────────────────────────────
+
+/**
+ * Compute HP-weighted win probability for each agent (Bayesian prior).
+ * Returns a Map of agentId -> probability (0-1).
+ */
+function computeOdds(agents) {
+    const totalHp = agents.reduce((s, a) => s + Math.max(0, a.hp ?? 0), 0);
+    const odds = new Map();
+    for (const a of agents) {
+        odds.set(a.id, totalHp > 0 ? Math.max(0, a.hp ?? 0) / totalHp : 1 / agents.length);
+    }
+    return odds;
+}
+
 // ── Rendering ──────────────────────────────────────────────────────────────────
 
 function renderPointsBanner() {
@@ -279,7 +295,18 @@ function renderAgentsGrid() {
     const grid = document.getElementById('agents-grid');
     if (!grid) return;
     const betMap = new Map(myBets.map(b => [b.agent_id, b]));
-    const aliveCount = currentRun.alive_count;
+    const aliveIds = new Set(currentRun.agents.map(a => a.id));
+    const odds = computeOdds(currentRun.agents);
+
+    // Build a children map so we can tell if an agent already has live children
+    const childrenAlive = new Map(); // agentId -> count of alive children
+    for (const a of currentRun.agents) {
+        if (a.parents) {
+            for (const pid of a.parents) {
+                childrenAlive.set(pid, (childrenAlive.get(pid) || 0) + 1);
+            }
+        }
+    }
 
     grid.innerHTML = currentRun.agents.map(agent => {
         const existingBet = betMap.get(agent.id);
@@ -289,6 +316,17 @@ function renderAgentsGrid() {
         const enPct = Math.max(0, Math.min(100, agent.energy ?? 100));
         const hpCol = hpPct > 50 ? '#4caf50' : hpPct > 25 ? '#ff9800' : '#f44336';
         const enCol = enPct > 50 ? '#4fc3f7' : enPct > 25 ? '#ff9800' : '#f44336';
+        const pct = ((odds.get(agent.id) || 0) * 100).toFixed(1);
+        const oddsCol = pct >= 20 ? '#4caf50' : pct >= 8 ? '#ffd54f' : '#f44336';
+
+        const liveChildren = childrenAlive.get(agent.id) || 0;
+        let parentNote = '';
+        if (liveChildren > 0) {
+            parentNote = `<div class="odds-note">Already a parent — children don't count</div>`;
+        } else if (agent.generation === 0 || agent.parents) {
+            // Could still have children in future
+            parentNote = `<div class="odds-note">Future children split this bet</div>`;
+        }
 
         return `<div class="agent-card${existingBet ? ' already-bet' : ''}" id="card-${agent.id}">
             ${existingBet ? `<div class="bet-badge">Bet: ${existingBet.amount}pts</div>` : ''}
@@ -311,7 +349,8 @@ function renderAgentsGrid() {
             ${agent.prompt
                 ? `<div class="agent-prompt">${escHtml(agent.prompt)}</div>`
                 : `<div class="agent-prompt no-prompt">No prompt set</div>`}
-            <div class="odds">×${aliveCount} payout</div>
+            <div class="odds" style="color:${oddsCol}">${pct}% chance</div>
+            ${parentNote}
             ${existingBet ? '' : `
                 <div class="bet-form">
                     <input type="number" id="amt-${agent.id}" min="1" max="${serverUser ? serverUser.points : 100}" value="10" placeholder="pts">

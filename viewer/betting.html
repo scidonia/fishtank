@@ -8,10 +8,18 @@
     <link rel="stylesheet" href="style.css">
     <script>
         // Auth0 SPA SDK refuses to load on non-HTTPS origins.
-        // Only inject the script tag when we're on a secure context.
-        if (window.location.protocol === 'https:') {
-            document.write('<script src="https://cdn.auth0.com/js/auth0-spa-js/2.0/auth0-spa-js.production.js"><\/script>');
-        }
+        // Inject it dynamically so it only loads (and fires) on secure contexts.
+        window._auth0Ready = new Promise((resolve, reject) => {
+            if (window.location.protocol !== 'https:') {
+                resolve(false); // not available
+                return;
+            }
+            const s = document.createElement('script');
+            s.src = 'https://cdn.auth0.com/js/auth0-spa-js/2.0/auth0-spa-js.production.js';
+            s.onload = () => resolve(true);
+            s.onerror = () => reject(new Error('Failed to load Auth0 SDK'));
+            document.head.appendChild(s);
+        });
     </script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -194,6 +202,14 @@
 
         .agent-card .agent-prompt.no-prompt {
             color: #3a5a6b;
+            font-style: italic;
+        }
+
+        .agent-card .odds-note {
+            font-size: 0.68rem;
+            color: #4a7a9b;
+            text-align: center;
+            margin: 2px 0 4px;
             font-style: italic;
         }
 

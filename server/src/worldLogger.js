@@ -121,6 +121,13 @@ export class WorldLogger {
         if (!columns.find(c => c.name === 'mating_cost')) {
             this.db.exec(`ALTER TABLE runs ADD COLUMN mating_cost INTEGER`);
         }
+
+        // Migrate: add had_children_at_bet_time column to bets if missing
+        const betColumns = this.db.prepare(`PRAGMA table_info(bets)`).all();
+        if (!betColumns.find(c => c.name === 'had_children_at_bet_time')) {
+            // NULL for old rows means unknown — treat as false (children count) for safety
+            this.db.exec(`ALTER TABLE bets ADD COLUMN had_children_at_bet_time INTEGER DEFAULT 0`);
+        }
     }
     
     closeStaleRuns() {
@@ -329,7 +336,7 @@ export class WorldLogger {
 
     // ── Betting ───────────────────────────────────────────────────────────────
 
-    placeBet(userId, runId, agentId, amount, competitorCount) {
+    placeBet(userId, runId, agentId, amount, competitorCount, hadChildrenAtBetTime = false) {
         const user = this.getUser(userId);
         if (!user) throw new Error('User not found');
         if (user.points < amount) throw new Error('Insufficient points');
@@ -343,9 +350,9 @@ export class WorldLogger {
 
         this.db.prepare(`UPDATE users SET points = points - ? WHERE user_id = ?`).run(amount, userId);
         const result = this.db.prepare(`
-            INSERT INTO bets (user_id, run_id, agent_id, amount, competitor_count, placed_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `).run(userId, runId, agentId, amount, competitorCount, Date.now());
+            INSERT INTO bets (user_id, run_id, agent_id, amount, competitor_count, placed_at, had_children_at_bet_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(userId, runId, agentId, amount, competitorCount, Date.now(), hadChildrenAtBetTime ? 1 : 0);
 
         return { betId: result.lastInsertRowid, pointsRemaining: user.points - amount };
     }
@@ -370,16 +377,54 @@ export class WorldLogger {
 
     /**
      * Resolve all pending bets for a run.
+     *
      * winningLineage: Set of agent IDs that are winners (survivors + their descendants).
-     * Payout = amount * competitorCount (the odds when the bet was placed).
+     * childrenOf: Map<agentId, childId[]> — full descendant map for the run.
+     * aliveAtEnd: Set<agentId> — agents still alive when the run ended.
+     *
+     * Rules:
+     *   - had_children_at_bet_time = true  → only the agent itself counts; children ignored.
+     *   - had_children_at_bet_time = false → agent OR any descendant winning counts,
+     *     but payout is divided by the number of alive descendants at resolution
+     *     (the bet is "split" across the lineage).
+     *
+     * Payout = floor(amount * competitor_count / split_factor)
      */
-    resolveBets(runId, winningLineage) {
+    resolveBets(runId, winningLineage, childrenOf = new Map(), aliveAtEnd = new Set()) {
         const bets = this.db.prepare(`SELECT * FROM bets WHERE run_id = ? AND resolved_at IS NULL`).all(runId);
         const now = Date.now();
 
+        // Recursively count alive descendants of an agent
+        const countAliveDescendants = (agentId, visited = new Set()) => {
+            if (visited.has(agentId)) return 0;
+            visited.add(agentId);
+            const children = childrenOf.get(agentId) || [];
+            return children.reduce((sum, cId) => {
+                const childAlive = aliveAtEnd.has(cId) ? 1 : 0;
+                return sum + childAlive + countAliveDescendants(cId, visited);
+            }, 0);
+        };
+
         for (const bet of bets) {
-            const won = winningLineage.has(bet.agent_id) ? 1 : 0;
-            const payout = won ? bet.amount * bet.competitor_count : 0;
+            let won = 0;
+            let payout = 0;
+
+            if (bet.had_children_at_bet_time) {
+                // Strict rule: only the agent's own survival counts
+                won = winningLineage.has(bet.agent_id) && aliveAtEnd.has(bet.agent_id) ? 1 : 0;
+            } else {
+                // Generous rule: agent OR any descendant winning counts
+                won = winningLineage.has(bet.agent_id) ? 1 : 0;
+            }
+
+            if (won) {
+                // Split factor: if agent had no children at bet time, divide payout
+                // by the number of alive descendants at resolution (min 1)
+                const splitFactor = bet.had_children_at_bet_time
+                    ? 1
+                    : Math.max(1, countAliveDescendants(bet.agent_id));
+                payout = Math.floor(bet.amount * bet.competitor_count / splitFactor);
+            }
 
             this.db.prepare(`
                 UPDATE bets SET resolved_at = ?, won = ?, payout = ? WHERE id = ?

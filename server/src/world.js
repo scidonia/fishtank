@@ -662,7 +662,8 @@ export class WorldServer {
                 }
             }
 
-            const resolved = this.logger.resolveBets(this.logger.runId, winningLineage);
+            const aliveAtEnd = new Set(aliveAgents.map(a => a.id));
+            const resolved = this.logger.resolveBets(this.logger.runId, winningLineage, childrenOf, aliveAtEnd);
             console.log(`🎰 Resolved ${resolved} bets. Winners: ${[...winnerIds].join(', ') || 'none'}`);
 
             // Broadcast resolution to all viewers

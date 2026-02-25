@@ -311,16 +311,21 @@ app.post('/api/betting/bet', requireAuth, (req, res) => {
         if (!agent_id || !amount) return res.status(400).json({ error: 'agent_id and amount required' });
 
         const snapshot = world.getSnapshot();
-        const aliveCount = snapshot.entities.filter(e => e.type === 'agent').length;
-        const agentExists = snapshot.entities.some(e => e.id === agent_id && e.type === 'agent');
-        if (!agentExists) return res.status(400).json({ error: 'Agent not found in current run' });
+        const aliveAgents = snapshot.entities.filter(e => e.type === 'agent');
+        const aliveCount = aliveAgents.length;
+        const agent = aliveAgents.find(e => e.id === agent_id);
+        if (!agent) return res.status(400).json({ error: 'Agent not found in current run' });
+
+        // Does this agent already have at least one living child at bet time?
+        const hadChildren = aliveAgents.some(e => e.parents && e.parents.includes(agent_id));
 
         const result = world.logger.placeBet(
             req.user.sub,
             world.logger.runId,
             agent_id,
             parseInt(amount),
-            aliveCount
+            aliveCount,
+            hadChildren
         );
         res.json({ ok: true, ...result });
     } catch (err) {
