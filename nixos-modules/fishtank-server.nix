@@ -22,18 +22,7 @@ let
   serverPackage = pkgs.buildNpmPackage {
     pname = "fishtank-server";
     version = "0.1.0";
-    src = lib.cleanSourceWith {
-      src = cfg.src;
-      filter =
-        path: _type:
-        let
-          rel = lib.removePrefix (toString cfg.src + "/") path;
-        in
-        lib.any (prefix: lib.hasPrefix prefix rel) [
-          "server/"
-          "shared/"
-        ];
-    };
+    src = lib.cleanSource cfg.src;
     npmRoot = "server";
     npmDepsHash = cfg.npmDepsHash;
     dontNpmBuild = true;
