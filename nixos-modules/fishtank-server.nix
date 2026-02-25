@@ -11,9 +11,9 @@ let
   # correct Auth0 credentials and server URL for each environment.
   viewerConfig = pkgs.writeText "fishtank-config.js" ''
     window.FISHTANK_CONFIG = {
-      serverUrl: '''',
-      auth0Domain: '${cfg.auth0.domain}',
-      auth0ClientId: '${cfg.auth0.clientId}',
+      serverUrl: "",
+      auth0Domain: "${cfg.auth0.domain}",
+      auth0ClientId: "${cfg.auth0.clientId}",
     };
   '';
 
