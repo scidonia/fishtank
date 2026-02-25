@@ -1,6 +1,7 @@
 .direnv/
 result
 **/__pycache__/
+server/node_modules/
 
 # Never commit plaintext secrets — only encrypted versions (env/secrets/*.env) are safe to commit
 env/secrets/*.env.plaintext

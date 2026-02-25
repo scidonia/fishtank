@@ -1,0 +1,15 @@
+# Dev profile: loaded in the nix devshell by scripts/dev-shell-hook.sh.
+# common.env is plain; secrets/dev.env is SOPS-encrypted.
+local:
+  - common.env
+  - secrets/dev.env
+
+# Deploy profiles: used by nixos-modules to build the EnvironmentFile list.
+# The secrets/ paths are decrypted to /run/secrets/env/... by sops-nix.
+deploy.dev.server:
+  - common.env
+  - secrets/dev.env
+
+deploy.prod.server:
+  - common.env
+  - secrets/prod.env
