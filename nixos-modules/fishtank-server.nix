@@ -38,6 +38,7 @@ let
   # Static viewer files with config.js overridden by the generated version.
   viewerPackage = pkgs.runCommand "fishtank-viewer" { } ''
     cp -r ${cfg.src}/viewer $out
+    chmod u+w $out/config.js
     # Replace the committed dev-defaults config.js with the generated one
     cp ${viewerConfig} $out/config.js
   '';
