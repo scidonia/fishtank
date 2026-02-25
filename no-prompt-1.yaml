@@ -1,0 +1,44 @@
+# no-prompt-1 experiment
+# Agents start with no prompt — behaviour emerges from the world
+# Tracking: murders, children, average lifespan
+
+use_mock: false  # Use real LLM
+max_turns: 500   # Run for 500 turns to gather sufficient data
+narrator: true   # Enable narrator for better understanding
+
+agents:
+  - id: Ren
+    avatar: scout
+
+  - id: Kas
+    avatar: nomad
+
+  - id: Miro
+    avatar: warden
+
+  - id: Tev
+    avatar: seeker
+
+  - id: Osa
+    avatar: ranger
+
+  - id: Fen
+    avatar: guardian
+
+  - id: Dala
+    avatar: explorer
+
+  - id: Vor
+    avatar: hunter
+
+  - id: Kin
+    avatar: gatherer
+
+  - id: Brek
+    avatar: builder
+
+  - id: Syla
+    avatar: shaman
+
+  - id: Dorn
+    avatar: rogue

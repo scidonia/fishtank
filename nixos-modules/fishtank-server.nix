@@ -82,8 +82,8 @@ in
     auth0 = {
       domain = lib.mkOption {
         type = lib.types.str;
-        description = "Auth0 tenant domain (e.g. your-tenant.eu.auth0.com)";
-        example = "your-tenant.eu.auth0.com";
+        description = "Auth0 tenant domain (e.g. myapp.eu.auth0.com)";
+        example = "myapp.eu.auth0.com";
       };
 
       clientId = lib.mkOption {

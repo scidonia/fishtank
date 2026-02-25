@@ -3,6 +3,6 @@
 // overriding these values with the correct per-environment configuration.
 window.FISHTANK_CONFIG = {
   serverUrl: 'http://localhost:3000',
-  auth0Domain: 'your-tenant.eu.auth0.com',
-  auth0ClientId: 'YOUR_AUTH0_CLIENT_ID',
+  auth0Domain: '',
+  auth0ClientId: '',
 };

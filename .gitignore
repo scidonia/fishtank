@@ -3,7 +3,7 @@ result
 **/__pycache__/
 server/node_modules/
 
-# Never commit plaintext secrets — only encrypted versions (env/secrets/*.env) are safe to commit
-env/secrets/*.env.plaintext
-env/local*.env
+# Secrets and deployment keys — kept in the infra repo, not here
+env/secrets/
+.sops.yaml
 data/
