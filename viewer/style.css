@@ -513,24 +513,6 @@ h2 {
     gap: 8px;
 }
 
-.blog-link {
-    display: inline-block;
-    padding: 8px 18px;
-    background: #e65100;
-    color: #fff;
-    border-radius: 4px;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: bold;
-    letter-spacing: 0.5px;
-    transition: background 0.2s;
-    white-space: nowrap;
-}
-
-.blog-link:hover {
-    background: #ff6d00;
-}
-
 .tab-btn {
     padding: 8px 20px;
     background: #1a1a1a;
@@ -554,6 +536,20 @@ h2 {
     background: #4fc3f7;
     color: #1a1a1a;
     border-color: #4fc3f7;
+}
+
+.tab-btn.blog-link {
+    background: #e65100;
+    color: #1a1a1a;
+    border-color: #e65100;
+    font-weight: bold;
+    font-size: 16px;
+    padding: 8px 24px;
+}
+
+.tab-btn.blog-link:hover {
+    background: #ff6d00;
+    border-color: #ff6d00;
 }
 
 .tab-content {
