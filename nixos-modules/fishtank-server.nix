@@ -18,18 +18,20 @@ let
   '';
 
   # Build the Node.js server package from the repo source.
-  # server/ and shared/ are both included to satisfy __dirname-relative imports.
+  # Build just the server/ subdirectory as the npm package.
+  # shared/ is copied separately in installPhase so the running service can
+  # reference map.txt via the MAP_FILE env var.
   serverPackage = pkgs.buildNpmPackage {
     pname = "fishtank-server";
     version = "0.1.0";
-    src = lib.cleanSource cfg.src;
-    npmRoot = "server";
+    # src must be the directory containing package.json / package-lock.json
+    src = "${cfg.src}/server";
     npmDepsHash = cfg.npmDepsHash;
     dontNpmBuild = true;
     installPhase = ''
-      mkdir -p $out
-      cp -r server $out/server
-      cp -r shared $out/shared
+      mkdir -p $out/server $out/shared
+      cp -r . $out/server
+      cp -r ${cfg.src}/shared/. $out/shared
     '';
   };
 
