@@ -142,6 +142,27 @@ in
       default = false;
       description = "Open port 80 (and 443 if SSL) in the firewall";
     };
+
+    agentsConfig = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = ''
+        Path to an agents YAML config file used by fishtank-launcher.
+        When set, a fishtank-launcher systemd service is started alongside the
+        world server to spawn all agents listed in the config.
+      '';
+    };
+
+    runnerPackage = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = null;
+      description = ''
+        The fishtank-runner Python package providing agent-llm, fishtank-launcher,
+        and fishtank-narrator binaries.  Pass
+        inputs.fishtank.packages.''${system}.fishtank-runner here.
+        Required when agentsConfig is set.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -185,6 +206,44 @@ in
           ProtectSystem = "strict";
           ProtectHome = true;
           ReadWritePaths = [ "/var/lib/fishtank" ];
+        }
+        // lib.optionalAttrs (cfg.environmentFile != null) {
+          EnvironmentFile = cfg.environmentFile;
+        };
+    };
+
+    systemd.services.fishtank-launcher = lib.mkIf (cfg.agentsConfig != null) {
+      description = "Fish Tank agent launcher";
+      after = [ "fishtank-server.service" ];
+      wants = [ "fishtank-server.service" ];
+      wantedBy = [ "multi-user.target" ];
+
+      # Give the world server a moment to come up before spawning agents.
+      preStart = ''
+        echo "Waiting for world server on port ${toString cfg.port}..."
+        for i in $(seq 1 30); do
+          if ${pkgs.curl}/bin/curl -sf http://127.0.0.1:${toString cfg.port}/health > /dev/null 2>&1; then
+            echo "World server is ready."
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "World server did not become ready in time." >&2
+        exit 1
+      '';
+
+      serviceConfig =
+        {
+          User = cfg.user;
+          Group = cfg.group;
+          ExecStart = "${cfg.runnerPackage}/bin/fishtank-launcher --config ${cfg.agentsConfig} --server-url http://127.0.0.1:${toString cfg.port}";
+          Restart = "on-failure";
+          RestartSec = 10;
+          NoNewPrivileges = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          ReadWritePaths = [ "/tmp" "/var/log/fishtank" ];
+          LogsDirectory = "fishtank";
         }
         // lib.optionalAttrs (cfg.environmentFile != null) {
           EnvironmentFile = cfg.environmentFile;

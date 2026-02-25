@@ -1,7 +1,7 @@
 // World Server - Authoritative simulation
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, isAbsolute } from 'path';
 import axios from 'axios';
 import { WorldLogger } from './worldLogger.js';
 
@@ -89,7 +89,9 @@ export class WorldServer {
     
     loadMapFromFile(filePath) {
         try {
-            const fullPath = join(__dirname, '..', '..', filePath);
+            // Support both absolute paths (from Nix MAP_FILE env var) and
+            // relative paths resolved from the repo root.
+            const fullPath = isAbsolute(filePath) ? filePath : join(__dirname, '..', '..', filePath);
             const content = readFileSync(fullPath, 'utf-8');
             const lines = content.split('\n').filter(line => line.length > 0);
             console.log(`✓ Loaded map from ${filePath}: ${lines.length} rows × ${lines[0].length} columns`);
