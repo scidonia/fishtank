@@ -3,6 +3,7 @@
 # Avatar field maps to the sprite in viewer/tiles/entities/
 
 use_mock: false
+narrator: false
 
 agents:
   - id: Ren
